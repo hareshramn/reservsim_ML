@@ -13,7 +13,7 @@ This document defines command contracts. It does not imply implementation alread
 ### Simulator Run
 
 ```bash
-sim_run --case <path> --backend cpu|gpu --steps <N> --seed <int> --out <dir>
+sim_run --case <path> --backend cpu|gpu --steps <N> --output-every <k> --seed <int> --out <dir>
 ```
 
 Expected behavior:
@@ -57,12 +57,15 @@ Expected behavior:
 ### Visualization Build
 
 ```bash
-python make_figures.py --run <run_id> --out <dir>
+tools/plot_run.sh --run <run_id_or_run_dir> --out <dir>
+tools/plot_run.sh --run <run_id_or_run_dir> --check-only
+python make_figures.py --run <run_id_or_run_dir> --out <dir>
 python make_animation.py --run <run_id> --field pressure|sw --fps 12 --out <dir>
 ```
 
 Expected behavior:
 - Generate required figures and MP4 with naming conventions.
+- `--check-only` must fail clearly when required output files are missing or shape contracts are violated.
 
 ## Minimum Output Folder Contract
 

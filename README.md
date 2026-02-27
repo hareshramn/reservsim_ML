@@ -106,3 +106,24 @@ Notes:
 - Requires `cmake`.
 - `--cuda on` requires `nvcc`.
 - Output binaries are placed under `core-cpp/build/<mode>-<cpu|cuda>/`.
+
+## Plotting Workflow
+
+Create project venv and install plotting dependencies:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/pip install numpy matplotlib
+```
+
+Generate figures from a run:
+
+```bash
+tools/plot_run.sh --run cases/model1/outputs/<run_id> --out figs
+```
+
+Validate run artifacts only (no figure generation):
+
+```bash
+tools/plot_run.sh --run cases/model1/outputs/<run_id> --check-only
+```

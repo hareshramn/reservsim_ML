@@ -19,6 +19,7 @@ struct Args {
     std::string case_path;
     std::string backend;
     int steps = 0;
+    int output_every = 1;
     int seed = 0;
     std::string out_dir;
 };
@@ -96,6 +97,7 @@ Args parse_args(int argc, char** argv) {
     }
 
     const std::vector<std::string> required_flags = {"--case", "--backend", "--steps", "--seed", "--out"};
+    const std::vector<std::string> known_flags = {"--case", "--backend", "--steps", "--output-every", "--seed", "--out"};
     for (const auto& flag : required_flags) {
         if (kv.find(flag) == kv.end()) {
             emit_and_exit(ExitCode::E_ARG_MISSING, "E_ARG_MISSING", "Missing required flag: " + flag);
@@ -103,7 +105,7 @@ Args parse_args(int argc, char** argv) {
     }
 
     for (const auto& [flag, _] : kv) {
-        if (std::find(required_flags.begin(), required_flags.end(), flag) == required_flags.end()) {
+        if (std::find(known_flags.begin(), known_flags.end(), flag) == known_flags.end()) {
             emit_and_exit(ExitCode::E_ARG_INVALID, "E_ARG_INVALID", "Unknown flag: " + flag);
         }
     }
@@ -111,6 +113,9 @@ Args parse_args(int argc, char** argv) {
     args.case_path = kv["--case"];
     args.backend = kv["--backend"];
     args.steps = parse_positive_int_arg(kv["--steps"], "steps");
+    if (const auto it = kv.find("--output-every"); it != kv.end()) {
+        args.output_every = parse_positive_int_arg(it->second, "output-every");
+    }
 
     try {
         size_t idx = 0;
@@ -226,6 +231,7 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
          << "  \"units\": \"" << json_escape(cfg.units) << "\",\n"
          << "  \"version\": \"slice0\",\n"
          << "  \"steps_requested\": " << args.steps << ",\n"
+         << "  \"output_every_steps\": " << args.output_every << ",\n"
          << "  \"schedule_end_step\": " << cfg.schedule_end_step << ",\n"
          << "  \"steps_to_run\": " << ctx.steps_to_run << "\n"
          << "}\n";
