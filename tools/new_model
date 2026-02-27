@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODELS_DIR="$ROOT_DIR/cases"
+
+if [[ $# -lt 1 ]]; then
+  cat <<'EOF'
+Usage:
+  ./tools/new_model <model_name>
+
+Example:
+  ./tools/new_model hetero_32x32
+EOF
+  exit 2
+fi
+
+MODEL_NAME="$1"
+MODEL_DIR="$MODELS_DIR/$MODEL_NAME"
+MODEL_FILE="$MODEL_DIR/model.yaml"
+
+if [[ -e "$MODEL_DIR" ]]; then
+  echo "Model folder already exists: $MODEL_DIR" >&2
+  exit 2
+fi
+
+mkdir -p "$MODEL_DIR/outputs"
+
+cat > "$MODEL_FILE" <<'EOF'
+case_name: "new_model"
+nx: 16
+ny: 16
+dt_policy: "cfl_adaptive_v1"
+units: "field"
+schedule_end_step: 20
+physics:
+  phases: "oil_water"
+  incompressible: true
+  gravity: false
+  capillary: false
+rock:
+  porosity: 0.2
+  permeability_md: 100.0
+fluid:
+  mu_w_cp: 1.0
+  mu_o_cp: 3.0
+  swc: 0.2
+  sor: 0.2
+  nw: 2.0
+  no: 2.0
+EOF
+
+cat > "$MODEL_DIR/run.env" <<'EOF'
+# Default run settings for this model folder.
+SIM_MODE=release
+SIM_BACKEND=cpu
+SIM_STEPS=10
+SIM_SEED=7
+SIM_OUT_DIR=auto
+EOF
+
+cat > "$MODEL_DIR/run" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../tools/model_run.sh" "$@"
+EOF
+chmod +x "$MODEL_DIR/run"
+
+echo "Created: $MODEL_DIR"
+echo "Edit: $MODEL_FILE"
+echo "Run:  cd cases/$MODEL_NAME && ./run"

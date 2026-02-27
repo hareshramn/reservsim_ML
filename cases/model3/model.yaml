@@ -1,0 +1,21 @@
+case_name: "model3_hetero_24x24"
+nx: 24
+ny: 24
+dt_policy: "cfl_adaptive_v1"
+units: "field"
+schedule_end_step: 25
+physics:
+  phases: "oil_water"
+  incompressible: true
+  gravity: false
+  capillary: false
+rock:
+  porosity: 0.22
+  permeability_md: 150.0
+fluid:
+  mu_w_cp: 0.8
+  mu_o_cp: 2.5
+  swc: 0.15
+  sor: 0.2
+  nw: 2.5
+  no: 1.8

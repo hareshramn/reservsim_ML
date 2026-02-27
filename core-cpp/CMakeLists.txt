@@ -1,0 +1,43 @@
+cmake_minimum_required(VERSION 3.16)
+project(reserv_ml_core LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+option(RESERV_ENABLE_CUDA "Enable CUDA toolchain for GPU builds" OFF)
+if(RESERV_ENABLE_CUDA)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+endif()
+
+add_library(sim_config
+    src/config_parser.cpp
+    src/state_init.cpp
+)
+target_include_directories(sim_config PUBLIC include)
+
+add_executable(sim_run
+    src/main.cpp
+)
+target_include_directories(sim_run PRIVATE include)
+target_link_libraries(sim_run PRIVATE sim_config)
+
+enable_testing()
+
+add_executable(config_parser_tests
+    tests/config_parser_tests.cpp
+)
+target_include_directories(config_parser_tests PRIVATE include)
+target_link_libraries(config_parser_tests PRIVATE sim_config)
+
+add_test(NAME config_parser_tests COMMAND config_parser_tests)
+
+add_executable(state_init_tests
+    tests/state_init_tests.cpp
+)
+target_include_directories(state_init_tests PRIVATE include)
+target_link_libraries(state_init_tests PRIVATE sim_config)
+
+add_test(NAME state_init_tests COMMAND state_init_tests)

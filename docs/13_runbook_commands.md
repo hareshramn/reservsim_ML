@@ -1,0 +1,83 @@
+# 13 Runbook Commands (Spec-Only)
+
+This document defines command contracts. It does not imply implementation already exists.
+
+## Global Reproducibility Policy
+
+- Seed is mandatory for every run.
+- Run ID format: `YYYYMMDD_HHMM_<case>_<backend>_<seed>`.
+- All outputs must be saved under `outputs/<run_id>/`.
+
+## Command Contracts
+
+### Simulator Run
+
+```bash
+sim_run --case <path> --backend cpu|gpu --steps <N> --seed <int> --out <dir>
+```
+
+Expected behavior:
+- Parse case config.
+- Run until `min(N, schedule_end_step)`.
+- Persist schema-defined arrays and metadata.
+- Emit `timing.csv`.
+- On error, exit with stable code and emit one-line JSON on `stderr`:
+  - `2` (`E_ARG_MISSING`), `3` (`E_ARG_INVALID`), `4` (`E_CASE_PARSE`), `5` (`E_CASE_SCHEMA`), `6` (`E_IO`).
+
+### Batch Benchmark
+
+```bash
+sim_bench --cases <list> --backends cpu,gpu --repeats <N> --out <dir>
+```
+
+Expected behavior:
+- Execute matrix across scenarios/backends.
+- Aggregate into benchmark summary CSV.
+
+### Surrogate Training
+
+```bash
+python train_surrogate.py --data <outputs_dir> --config <yaml> --seed <int> --out <dir>
+```
+
+Expected behavior:
+- Build datasets per split policy.
+- Train and save checkpoint(s) + train log.
+
+### Surrogate Evaluation
+
+```bash
+python eval_surrogate.py --checkpoint <ckpt> --case <path> --horizons 20,50,100 --out <dir>
+```
+
+Expected behavior:
+- Run one-step and rollout metrics.
+- Save metrics CSV and comparison plots.
+
+### Visualization Build
+
+```bash
+python make_figures.py --run <run_id> --out <dir>
+python make_animation.py --run <run_id> --field pressure|sw --fps 12 --out <dir>
+```
+
+Expected behavior:
+- Generate required figures and MP4 with naming conventions.
+
+## Minimum Output Folder Contract
+
+For each run directory:
+- `meta.json`
+- `state_pressure.npy`
+- `state_sw.npy`
+- `well_rates.npy`
+- `well_bhp.npy`
+- `timing.csv`
+- `logs.txt`
+
+## Checklist Before Accepting Any Run
+
+1. Seed present in metadata.
+2. Run ID matches naming policy.
+3. Required files exist.
+4. Metrics parse without schema errors.

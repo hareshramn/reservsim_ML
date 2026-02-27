@@ -1,0 +1,18 @@
+case_name: "fixture_missing_field"
+nx: 8
+ny: 6
+dt_policy: "cfl_adaptive_v1"
+units: "field"
+schedule_end_step: 12
+physics:
+  phases: "oil_water"
+  incompressible: true
+  gravity: false
+  capillary: false
+rock:
+  porosity: 0.2
+  permeability_md: 100.0
+fluid:
+  mu_w_cp: 1.0
+  mu_o_cp: 3.0
+  swc: 0.2

@@ -1,0 +1,23 @@
+# Build artifacts
+build/
+core-cpp/build/
+cmake-build-*/
+
+# Python caches and virtual environments
+__pycache__/
+*.pyc
+.venv/
+.venv-tools/
+
+# Logs and temporary files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Runtime outputs
+outputs/
+cases/**/outputs/
+
+# Local/private notes
+Project_deets

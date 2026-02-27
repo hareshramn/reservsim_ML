@@ -1,0 +1,22 @@
+case_name: "minimal_16x16"
+nx: 16
+ny: 16
+dt_policy: "cfl_adaptive_v1"
+units: "field"
+schedule_end_step: 20
+physics:
+  phases: "oil_water"
+  incompressible: true
+  gravity: false
+  capillary: false
+rock:
+  porosity: 0.2
+  permeability_md: 100.0
+fluid:
+  mu_w_cp: 1.0
+  mu_o_cp: 3.0
+  swc: 0.2
+  sor: 0.2
+  nw: 2.0
+  no: 2.0
+

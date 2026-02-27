@@ -1,0 +1,108 @@
+# Reservoir GPU PINN Mini-Project
+
+Portfolio-focused, 2-week project to demonstrate reservoir simulation, CUDA optimization, and physics-informed ML surrogate modeling.
+
+## Goal
+
+Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that shows:
+- numerically credible IMPES simulation,
+- measurable CPU vs GPU acceleration on RTX 3060,
+- surrogate-assisted prediction with physics-informed losses.
+
+## What This Demonstrates
+
+- Reservoir physics and numerical methods (Darcy flow + saturation transport).
+- GPU kernel design and profiling discipline.
+- ML surrogate design linked to physical constraints.
+- Reproducible engineering workflow suitable for technical interviews.
+
+## Planned Repo Map
+
+```text
+.
+├── AGENTS.md
+├── README.md
+├── Project_deets
+├── docs/
+│   ├── 00_project_charter.md
+│   ├── 01_problem_statement.md
+│   ├── 02_physics_math.md
+│   ├── 03_numerical_methods.md
+│   ├── 04_software_architecture.md
+│   ├── 05_gpu_optimization_plan.md
+│   ├── 06_surrogate_ml_plan.md
+│   ├── 07_validation_and_benchmarking.md
+│   ├── 08_visualization_and_reporting.md
+│   ├── 09_execution_timeline_2weeks.md
+│   ├── 10_risks_and_mitigations.md
+│   ├── 11_definition_of_done.md
+│   ├── 12_agent_task_board.md
+│   ├── 13_runbook_commands.md
+│   └── 14_artifact_spec.md
+├── core-cpp/      (to be implemented)
+├── python/        (to be implemented)
+├── cases/         (to be implemented)
+└── outputs/       (generated artifacts)
+```
+
+## Start Here
+
+1. [Project Charter](docs/00_project_charter.md)
+2. [Problem Statement](docs/01_problem_statement.md)
+3. [Physics and Math](docs/02_physics_math.md)
+4. [Numerical Methods](docs/03_numerical_methods.md)
+5. [Software Architecture](docs/04_software_architecture.md)
+6. [GPU Optimization Plan](docs/05_gpu_optimization_plan.md)
+7. [Surrogate ML Plan](docs/06_surrogate_ml_plan.md)
+8. [Validation and Benchmarking](docs/07_validation_and_benchmarking.md)
+9. [Visualization and Reporting](docs/08_visualization_and_reporting.md)
+10. [2-Week Timeline](docs/09_execution_timeline_2weeks.md)
+
+## Final Expected Outputs
+
+- `benchmark_summary.csv` with CPU/GPU/surrogate performance and error metrics.
+- Pressure/saturation plots and time-series charts.
+- MP4 animations of field evolution.
+- Technical report with physics, numerics, optimization, and ML findings.
+
+## Build Tooling (Custom MCP-Style)
+
+Fastest workflow:
+
+```bash
+./build     # debug cpu build
+./test      # debug cpu build + tests
+./tools/new_model hetero_32x32
+cd cases/model1 && ./run
+```
+
+Model convention:
+- each model lives in its own folder,
+- required file name: `model.yaml`,
+- defaults live in `run.env`,
+- run with local `./run`,
+- outputs are written to `<model_dir>/outputs/<run_id>/`.
+
+Examples:
+- `cases/model1/model.yaml`
+- `cases/model2/model.yaml`
+- `cases/model3/model.yaml`
+
+Use the local custom build tool (advanced options):
+
+```bash
+tools/mcp_tools.sh compile --mode debug --cuda off
+tools/mcp_tools.sh compile --mode release --cuda on --tests
+tools/mcp_tools.sh compile --mode release --cuda auto --clean
+```
+
+Options:
+- `--mode debug|release`
+- `--cuda auto|on|off`
+- `--clean`
+- `--tests`
+
+Notes:
+- Requires `cmake`.
+- `--cuda on` requires `nvcc`.
+- Output binaries are placed under `core-cpp/build/<mode>-<cpu|cuda>/`.

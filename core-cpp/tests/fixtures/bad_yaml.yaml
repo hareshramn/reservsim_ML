@@ -1,0 +1,7 @@
+case_name "missing_colon"
+nx: 8
+ny: 6
+dt_policy: "cfl_adaptive_v1"
+units: "field"
+schedule_end_step: 12
+

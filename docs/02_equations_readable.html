@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Governing Equations - Readable Sheet</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #4b5563;
+      --line: #d1d5db;
+      --accent: #0f766e;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
+      line-height: 1.45;
+    }
+    main {
+      max-width: 900px;
+      margin: 24px auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 28px 32px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+    }
+    h1, h2, h3 { margin: 0 0 10px; }
+    h1 { font-size: 1.7rem; color: var(--accent); }
+    h2 { font-size: 1.25rem; margin-top: 22px; }
+    h3 { font-size: 1.02rem; margin-top: 16px; }
+    p { margin: 8px 0; }
+    ul { margin: 8px 0 0 20px; }
+    .eq {
+      margin: 12px 0;
+      padding: 10px 14px;
+      border-left: 4px solid #a7f3d0;
+      background: #f0fdfa;
+      overflow-x: auto;
+    }
+    .small { color: var(--muted); font-size: 0.96rem; }
+    @media print {
+      body { background: #fff; }
+      main { margin: 0; border: none; box-shadow: none; max-width: none; border-radius: 0; }
+      .eq { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Governing Equations (Readable Version)</h1>
+    <p class="small">From <code>docs/02_physics_math.md</code> and <code>docs/02a_governing_equation_derivation.md</code></p>
+
+    <h2>Assumptions (v1)</h2>
+    <ul>
+      <li>Two immiscible phases: water and oil</li>
+      <li>Incompressible fluids and rock</li>
+      <li>No capillary pressure, no gravity</li>
+      <li>Constant porosity</li>
+    </ul>
+
+    <h2>1) Phase Conservation</h2>
+    <p>For each phase <em>&alpha; in {w, o}</em>:</p>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <mi>&#x03C6;</mi>
+          <mfrac>
+            <mrow><mi>&#x2202;</mi><msub><mi>S</mi><mi>&#x03B1;</mi></msub></mrow>
+            <mrow><mi>&#x2202;</mi><mi>t</mi></mrow>
+          </mfrac>
+          <mo>+</mo>
+          <mi>&#x2207;</mi><mo>&#x22C5;</mo><msub><mi>u</mi><mi>&#x03B1;</mi></msub>
+          <mo>=</mo><msub><mi>q</mi><mi>&#x03B1;</mi></msub>
+        </mrow>
+      </math>
+    </div>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow><msub><mi>S</mi><mi>w</mi></msub><mo>+</mo><msub><mi>S</mi><mi>o</mi></msub><mo>=</mo><mn>1</mn></mrow>
+      </math>
+    </div>
+
+    <h2>2) Darcy Law and Mobilities</h2>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <msub><mi>u</mi><mi>&#x03B1;</mi></msub>
+          <mo>=</mo>
+          <mo>-</mo>
+          <msub><mi>&#x03BB;</mi><mi>&#x03B1;</mi></msub>
+          <mi>K</mi>
+          <mi>&#x2207;</mi><mi>p</mi>
+        </mrow>
+      </math>
+    </div>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <msub><mi>&#x03BB;</mi><mi>&#x03B1;</mi></msub>
+          <mo>=</mo>
+          <mfrac><mrow><msub><mi>k</mi><mrow><mi>r</mi><mi>&#x03B1;</mi></mrow></msub></mrow><msub><mi>&#x03BC;</mi><mi>&#x03B1;</mi></msub></mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <msub><mi>&#x03BB;</mi><mi>t</mi></msub><mo>=</mo><msub><mi>&#x03BB;</mi><mi>w</mi></msub><mo>+</mo><msub><mi>&#x03BB;</mi><mi>o</mi></msub>
+          <mo>,</mo>
+          <msub><mi>u</mi><mi>t</mi></msub><mo>=</mo><msub><mi>u</mi><mi>w</mi></msub><mo>+</mo><msub><mi>u</mi><mi>o</mi></msub>
+          <mo>=</mo><mo>-</mo><msub><mi>&#x03BB;</mi><mi>t</mi></msub><mi>K</mi><mi>&#x2207;</mi><mi>p</mi>
+        </mrow>
+      </math>
+    </div>
+
+    <h2>3) Pressure Equation (Elliptic)</h2>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <mi>&#x2207;</mi><mo>&#x22C5;</mo><msub><mi>u</mi><mi>t</mi></msub><mo>=</mo><msub><mi>q</mi><mi>t</mi></msub>
+          <mo>,</mo>
+          <msub><mi>q</mi><mi>t</mi></msub><mo>=</mo><msub><mi>q</mi><mi>w</mi></msub><mo>+</mo><msub><mi>q</mi><mi>o</mi></msub>
+        </mrow>
+      </math>
+    </div>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <mi>&#x2207;</mi><mo>&#x22C5;</mo><mo>(</mo><mo>-</mo><msub><mi>&#x03BB;</mi><mi>t</mi></msub><mi>K</mi><mi>&#x2207;</mi><mi>p</mi><mo>)</mo><mo>=</mo><msub><mi>q</mi><mi>t</mi></msub>
+        </mrow>
+      </math>
+    </div>
+
+    <h2>4) Water Transport Equation</h2>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <msub><mi>f</mi><mi>w</mi></msub><mo>=</mo>
+          <mfrac><msub><mi>&#x03BB;</mi><mi>w</mi></msub><msub><mi>&#x03BB;</mi><mi>t</mi></msub></mfrac>
+          <mo>,</mo>
+          <msub><mi>u</mi><mi>w</mi></msub><mo>=</mo><msub><mi>f</mi><mi>w</mi></msub><msub><mi>u</mi><mi>t</mi></msub>
+        </mrow>
+      </math>
+    </div>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <mi>&#x03C6;</mi>
+          <mfrac>
+            <mrow><mi>&#x2202;</mi><msub><mi>S</mi><mi>w</mi></msub></mrow>
+            <mrow><mi>&#x2202;</mi><mi>t</mi></mrow>
+          </mfrac>
+          <mo>+</mo><mi>&#x2207;</mi><mo>&#x22C5;</mo><mo>(</mo><msub><mi>f</mi><mi>w</mi></msub><msub><mi>u</mi><mi>t</mi></msub><mo>)</mo>
+          <mo>=</mo><msub><mi>q</mi><mi>w</mi></msub>
+        </mrow>
+      </math>
+    </div>
+
+    <h2>Final v1 Coupled System</h2>
+    <div class="eq">
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <mi>&#x2207;</mi><mo>&#x22C5;</mo><mo>(</mo><mo>-</mo><msub><mi>&#x03BB;</mi><mi>t</mi></msub><mi>K</mi><mi>&#x2207;</mi><mi>p</mi><mo>)</mo><mo>=</mo><msub><mi>q</mi><mi>t</mi></msub>
+        </mrow>
+      </math>
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <mi>&#x03C6;</mi>
+          <mfrac>
+            <mrow><mi>&#x2202;</mi><msub><mi>S</mi><mi>w</mi></msub></mrow>
+            <mrow><mi>&#x2202;</mi><mi>t</mi></mrow>
+          </mfrac>
+          <mo>+</mo><mi>&#x2207;</mi><mo>&#x22C5;</mo><mo>(</mo><msub><mi>f</mi><mi>w</mi></msub><msub><mi>u</mi><mi>t</mi></msub><mo>)</mo><mo>=</mo><msub><mi>q</mi><mi>w</mi></msub>
+        </mrow>
+      </math>
+      <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+        <mrow>
+          <msub><mi>u</mi><mi>t</mi></msub><mo>=</mo><mo>-</mo><msub><mi>&#x03BB;</mi><mi>t</mi></msub><mi>K</mi><mi>&#x2207;</mi><mi>p</mi>
+          <mo>,</mo>
+          <msub><mi>f</mi><mi>w</mi></msub><mo>=</mo><mfrac><msub><mi>&#x03BB;</mi><mi>w</mi></msub><msub><mi>&#x03BB;</mi><mi>t</mi></msub></mfrac>
+        </mrow>
+      </math>
+    </div>
+  </main>
+</body>
+</html>
