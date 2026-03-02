@@ -1,0 +1,68 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug sim_run (model1)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/core-cpp/build/debug-cpu/sim_run",
+      "args": [
+        "--case",
+        "${workspaceFolder}/cases/model1/model.yaml",
+        "--backend",
+        "cpu",
+        "--steps",
+        "5",
+        "--output-every",
+        "1",
+        "--seed",
+        "7",
+        "--out",
+        "${workspaceFolder}/cases/model1/outputs/debug_run"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        {
+          "name": "RESERV_ML_REPO_ROOT",
+          "value": "${workspaceFolder}"
+        }
+      ],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
+        {
+          "description": "Enable GDB pretty printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Build debug CPU"
+    },
+    {
+      "name": "Debug pressure_assembly_tests",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/core-cpp/build/debug-cpu/pressure_assembly_tests",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        {
+          "name": "RESERV_ML_REPO_ROOT",
+          "value": "${workspaceFolder}"
+        }
+      ],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
+        {
+          "description": "Enable GDB pretty printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Build debug CPU"
+    }
+  ]
+}

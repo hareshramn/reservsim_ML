@@ -4,6 +4,7 @@ project(reserv_ml_core LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(RESERV_ENABLE_CUDA "Enable CUDA toolchain for GPU builds" OFF)
 if(RESERV_ENABLE_CUDA)
@@ -14,6 +15,7 @@ endif()
 
 add_library(sim_config
     src/config_parser.cpp
+    src/pressure_assembly.cpp
     src/state_init.cpp
 )
 target_include_directories(sim_config PUBLIC include)
@@ -41,3 +43,11 @@ target_include_directories(state_init_tests PRIVATE include)
 target_link_libraries(state_init_tests PRIVATE sim_config)
 
 add_test(NAME state_init_tests COMMAND state_init_tests)
+
+add_executable(pressure_assembly_tests
+    tests/pressure_assembly_tests.cpp
+)
+target_include_directories(pressure_assembly_tests PRIVATE include)
+target_link_libraries(pressure_assembly_tests PRIVATE sim_config)
+
+add_test(NAME pressure_assembly_tests COMMAND pressure_assembly_tests)
