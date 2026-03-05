@@ -17,6 +17,7 @@ add_library(sim_config
     src/config_parser.cpp
     src/pressure_assembly.cpp
     src/state_init.cpp
+    src/transport.cpp
 )
 target_include_directories(sim_config PUBLIC include)
 
@@ -51,3 +52,19 @@ target_include_directories(pressure_assembly_tests PRIVATE include)
 target_link_libraries(pressure_assembly_tests PRIVATE sim_config)
 
 add_test(NAME pressure_assembly_tests COMMAND pressure_assembly_tests)
+
+add_executable(transport_tests
+    tests/transport_tests.cpp
+)
+target_include_directories(transport_tests PRIVATE include)
+target_link_libraries(transport_tests PRIVATE sim_config)
+
+add_test(NAME transport_tests COMMAND transport_tests)
+
+add_executable(sim_run_contract_tests
+    tests/sim_run_contract_tests.cpp
+)
+target_include_directories(sim_run_contract_tests PRIVATE include)
+target_link_libraries(sim_run_contract_tests PRIVATE sim_config)
+
+add_test(NAME sim_run_contract_tests COMMAND sim_run_contract_tests)

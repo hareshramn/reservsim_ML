@@ -43,6 +43,19 @@ void test_valid_case() {
     expect_true(cfg.fluid.sor > 0.19 && cfg.fluid.sor < 0.21, "fluid.sor parse");
     expect_true(cfg.fluid.nw > 2.0 && cfg.fluid.nw < 2.2, "fluid.nw parse");
     expect_true(cfg.fluid.no > 2.2 && cfg.fluid.no < 2.4, "fluid.no parse");
+    expect_true(!cfg.wells.enabled, "wells disabled for base fixture");
+}
+
+void test_valid_wells_case() {
+    const SimulationConfig cfg = load_simulation_config(fixture_path("wells_case.yaml"));
+    expect_true(cfg.wells.enabled, "wells enabled");
+    expect_true(cfg.wells.injector_cell_x == 0, "injector x parse");
+    expect_true(cfg.wells.injector_cell_y == 0, "injector y parse");
+    expect_true(cfg.wells.producer_cell_x == 7, "producer x parse");
+    expect_true(cfg.wells.producer_cell_y == 5, "producer y parse");
+    expect_true(cfg.wells.injector_rate_stb_day > 119.9 && cfg.wells.injector_rate_stb_day < 120.1, "injector rate parse");
+    expect_true(cfg.wells.producer_bhp_psi > 2799.0 && cfg.wells.producer_bhp_psi < 2801.0, "producer bhp parse");
+    expect_true(cfg.wells.producer_pi > 1.49 && cfg.wells.producer_pi < 1.51, "producer pi parse");
 }
 
 void expect_throws(const std::string& file, ExitCode code, const std::string& symbol) {
@@ -65,6 +78,7 @@ void test_invalid_cases() {
 
 int main() {
     test_valid_case();
+    test_valid_wells_case();
     test_invalid_cases();
     std::cout << "config_parser_tests: PASS\n";
     return 0;

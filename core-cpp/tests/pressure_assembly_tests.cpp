@@ -120,6 +120,57 @@ void test_invalid_state_rejected() {
     }
 }
 
+void test_pressure_gauge_application() {
+    const SimulationConfig cfg = load_simulation_config(fixture_path("valid_case.yaml"));
+    const ReservoirState state = initialize_state(cfg);
+    PressureSystem system = assemble_pressure_system(cfg, state);
+
+    apply_pressure_gauge(system, 0, 3000.0);
+    expect_true(std::abs(system.diag[0] - 1.0) < 1.0e-12, "gauge diagonal reset");
+    expect_true(std::abs(system.rhs[0] - 3000.0) < 1.0e-12, "gauge rhs set");
+    expect_true(std::abs(system.east[0]) < 1.0e-12, "gauge east zeroed");
+    expect_true(std::abs(system.north[0]) < 1.0e-12, "gauge north zeroed");
+    expect_true(system.rhs[1] > 0.0, "neighbor rhs adjusted");
+}
+
+void test_pressure_solver_converges_to_constant_reference() {
+    const SimulationConfig cfg = load_simulation_config(fixture_path("valid_case.yaml"));
+    const ReservoirState state = initialize_state(cfg);
+    PressureSystem system = assemble_pressure_system(cfg, state);
+    apply_pressure_gauge(system, 0, 3000.0);
+
+    const std::vector<double> initial_guess(system.diag.size(), 0.0);
+    const PressureSolveResult result = solve_pressure_cg_jacobi(system, initial_guess, 1.0e-10, 500);
+    expect_true(result.iterations > 0, "solver performed iterations");
+    expect_true(result.relative_residual <= 1.0e-10, "solver residual target");
+
+    const std::vector<double> ax = apply_pressure_system(system, result.pressure);
+    double residual_sq = 0.0;
+    double rhs_sq = 0.0;
+    for (size_t i = 0; i < ax.size(); ++i) {
+        const double residual = ax[i] - system.rhs[i];
+        residual_sq += residual * residual;
+        rhs_sq += system.rhs[i] * system.rhs[i];
+        expect_true(std::abs(result.pressure[i] - 3000.0) < 1.0e-6, "constant pressure solution");
+    }
+    const double relative_linear_residual = std::sqrt(residual_sq / rhs_sq);
+    expect_true(relative_linear_residual <= 1.0e-10, "solver satisfies linear system");
+}
+
+void test_pressure_solver_rejects_bad_input() {
+    const SimulationConfig cfg = load_simulation_config(fixture_path("valid_case.yaml"));
+    const ReservoirState state = initialize_state(cfg);
+    PressureSystem system = assemble_pressure_system(cfg, state);
+    apply_pressure_gauge(system, 0, 3000.0);
+
+    try {
+        (void)solve_pressure_cg_jacobi(system, std::vector<double>(1, 0.0), 1.0e-8, 10);
+        expect_true(false, "expected bad initial guess failure");
+    } catch (const CliError& e) {
+        expect_true(e.code() == ExitCode::E_CASE_SCHEMA, "bad initial guess error code");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -127,6 +178,9 @@ int main() {
     test_pressure_system_symmetry();
     test_constant_pressure_conservation();
     test_invalid_state_rejected();
+    test_pressure_gauge_application();
+    test_pressure_solver_converges_to_constant_reference();
+    test_pressure_solver_rejects_bad_input();
     std::cout << "pressure_assembly_tests: PASS\n";
     return 0;
 }

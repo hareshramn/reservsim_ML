@@ -16,4 +16,17 @@ struct PressureSystem {
     std::vector<double> rhs;
 };
 
+struct PressureSolveResult {
+    std::vector<double> pressure;
+    int iterations = 0;
+    double relative_residual = 0.0;
+};
+
 PressureSystem assemble_pressure_system(const SimulationConfig& cfg, const ReservoirState& state);
+void apply_pressure_gauge(PressureSystem& system, int gauge_cell, double gauge_value);
+std::vector<double> apply_pressure_system(const PressureSystem& system, const std::vector<double>& x);
+PressureSolveResult solve_pressure_cg_jacobi(
+    const PressureSystem& system,
+    const std::vector<double>& initial_guess,
+    double relative_tolerance,
+    int max_iterations);

@@ -59,6 +59,19 @@ int parse_positive_int(const std::string& raw, const std::string& field) {
     }
 }
 
+int parse_nonnegative_int(const std::string& raw, const std::string& field) {
+    try {
+        size_t idx = 0;
+        const int value = std::stoi(raw, &idx);
+        if (idx != raw.size() || value < 0) {
+            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " must be a non-negative integer.");
+        }
+        return value;
+    } catch (const std::exception&) {
+        fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " must be a non-negative integer.");
+    }
+}
+
 double parse_positive_double(const std::string& raw, const std::string& field) {
     try {
         size_t idx = 0;
@@ -197,6 +210,33 @@ SimulationConfig load_simulation_config(const std::string& case_path) {
     cfg.fluid.nw = parse_positive_double(require_field(fields, "fluid.nw"), "fluid.nw");
     cfg.fluid.no = parse_positive_double(require_field(fields, "fluid.no"), "fluid.no");
 
+    const bool has_inj_x = fields.find("injector_cell_x") != fields.end();
+    const bool has_inj_y = fields.find("injector_cell_y") != fields.end();
+    const bool has_inj_rate = fields.find("injector_rate_stb_day") != fields.end();
+    const bool has_prod_x = fields.find("producer_cell_x") != fields.end();
+    const bool has_prod_y = fields.find("producer_cell_y") != fields.end();
+    const bool has_prod_bhp = fields.find("producer_bhp_psi") != fields.end();
+    const bool has_any_well_field = has_inj_x || has_inj_y || has_inj_rate || has_prod_x || has_prod_y || has_prod_bhp;
+    const bool has_all_well_fields = has_inj_x && has_inj_y && has_inj_rate && has_prod_x && has_prod_y && has_prod_bhp;
+    if (has_any_well_field && !has_all_well_fields) {
+        fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA",
+             "Well configuration must define injector_cell_x, injector_cell_y, injector_rate_stb_day, "
+             "producer_cell_x, producer_cell_y, and producer_bhp_psi together.");
+    }
+
+    if (has_all_well_fields) {
+        cfg.wells.enabled = true;
+        cfg.wells.injector_cell_x = parse_nonnegative_int(require_field(fields, "injector_cell_x"), "injector_cell_x");
+        cfg.wells.injector_cell_y = parse_nonnegative_int(require_field(fields, "injector_cell_y"), "injector_cell_y");
+        cfg.wells.injector_rate_stb_day = parse_positive_double(require_field(fields, "injector_rate_stb_day"), "injector_rate_stb_day");
+        cfg.wells.producer_cell_x = parse_nonnegative_int(require_field(fields, "producer_cell_x"), "producer_cell_x");
+        cfg.wells.producer_cell_y = parse_nonnegative_int(require_field(fields, "producer_cell_y"), "producer_cell_y");
+        cfg.wells.producer_bhp_psi = parse_positive_double(require_field(fields, "producer_bhp_psi"), "producer_bhp_psi");
+        if (const auto it = fields.find("producer_pi"); it != fields.end()) {
+            cfg.wells.producer_pi = parse_positive_double(it->second, "producer_pi");
+        }
+    }
+
     if (cfg.case_name.empty() || cfg.dt_policy.empty() || cfg.units.empty()) {
         fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", "case_name, dt_policy, and units must be non-empty.");
     }
@@ -205,6 +245,20 @@ SimulationConfig load_simulation_config(const std::string& case_path) {
     }
     if (cfg.fluid.swc + cfg.fluid.sor >= 1.0) {
         fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", "fluid.swc + fluid.sor must be < 1.");
+    }
+    if (cfg.wells.enabled) {
+        if (cfg.wells.injector_cell_x < 0 || cfg.wells.injector_cell_x >= cfg.nx ||
+            cfg.wells.injector_cell_y < 0 || cfg.wells.injector_cell_y >= cfg.ny) {
+            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", "Injector cell coordinates are out of grid bounds.");
+        }
+        if (cfg.wells.producer_cell_x < 0 || cfg.wells.producer_cell_x >= cfg.nx ||
+            cfg.wells.producer_cell_y < 0 || cfg.wells.producer_cell_y >= cfg.ny) {
+            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", "Producer cell coordinates are out of grid bounds.");
+        }
+        if (cfg.wells.injector_cell_x == cfg.wells.producer_cell_x &&
+            cfg.wells.injector_cell_y == cfg.wells.producer_cell_y) {
+            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", "Injector and producer cells must be distinct.");
+        }
     }
 
     return cfg;

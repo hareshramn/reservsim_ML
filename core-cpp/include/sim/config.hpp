@@ -23,6 +23,17 @@ struct FluidConfig {
     double no = 0.0;
 };
 
+struct WellsConfig {
+    bool enabled = false;
+    int injector_cell_x = 0;
+    int injector_cell_y = 0;
+    double injector_rate_stb_day = 0.0;
+    int producer_cell_x = 0;
+    int producer_cell_y = 0;
+    double producer_bhp_psi = 0.0;
+    double producer_pi = 1.0;
+};
+
 struct SimulationConfig {
     std::string case_name;
     int nx = 0;
@@ -33,6 +44,7 @@ struct SimulationConfig {
     PhysicsConfig physics;
     RockConfig rock;
     FluidConfig fluid;
+    WellsConfig wells;
 };
 
 SimulationConfig load_simulation_config(const std::string& case_path);

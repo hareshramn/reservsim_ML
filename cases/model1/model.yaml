@@ -4,6 +4,12 @@ ny: 16
 dt_policy: "cfl_adaptive_v1"
 units: "field"
 schedule_end_step: 20
+injector_cell_x: 0
+injector_cell_y: 0
+injector_rate_stb_day: 100.0
+producer_cell_x: 15
+producer_cell_y: 15
+producer_bhp_psi: 2800.0
 physics:
   phases: "oil_water"
   incompressible: true
@@ -19,4 +25,3 @@ fluid:
   sor: 0.2
   nw: 2.0
   no: 2.0
-

@@ -1,7 +1,10 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -11,7 +14,9 @@
 
 #include "sim/config.hpp"
 #include "sim/error.hpp"
+#include "sim/pressure.hpp"
 #include "sim/state.hpp"
+#include "sim/transport.hpp"
 
 namespace fs = std::filesystem;
 
@@ -28,6 +33,36 @@ struct OutputContext {
     fs::path out_dir;
     std::string run_id;
     int steps_to_run = 0;
+};
+
+struct RunDiagnostics {
+    PressureSolveResult pressure_solve;
+    double pressure_time_s = 0.0;
+    TransportDiagnostics transport;
+    double transport_time_s = 0.0;
+    int retries_used = 0;
+    double pressure_avg = 0.0;
+    double pressure_min = 0.0;
+    double pressure_max = 0.0;
+    double sw_avg = 0.0;
+    double sw_min = 0.0;
+    double sw_max = 0.0;
+    std::vector<double> well_rates_step;
+    std::vector<double> well_bhp_step;
+};
+
+struct RunSummary {
+    std::vector<RunDiagnostics> step_diagnostics;
+    std::vector<double> pressure_history;
+    std::vector<double> sw_history;
+    std::vector<double> well_rates_history;
+    std::vector<double> well_bhp_history;
+    int checkpoint_count = 0;
+    double mass_balance_rel_last = 0.0;
+    double mass_balance_rel_max = 0.0;
+    double mass_balance_rel_cumulative = 0.0;
+    int step_retries_total = 0;
+    int step_retries_max = 0;
 };
 
 std::string json_escape(const std::string& s) {
@@ -213,12 +248,14 @@ OutputContext prepare_output_context(const Args& args, int schedule_end_step) {
     return ctx;
 }
 
-void write_meta_json(const OutputContext& ctx, const Args& args, const SimulationConfig& cfg) {
+void write_meta_json(const OutputContext& ctx, const Args& args, const SimulationConfig& cfg, const RunSummary& summary) {
     const fs::path meta_path = ctx.out_dir / "meta.json";
     std::ofstream meta(meta_path);
     if (!meta.is_open()) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "Unable to write file: " + meta_path.string());
     }
+
+    const RunDiagnostics last = summary.step_diagnostics.empty() ? RunDiagnostics{} : summary.step_diagnostics.back();
 
     meta << "{\n"
          << "  \"run_id\": \"" << json_escape(ctx.run_id) << "\",\n"
@@ -229,11 +266,22 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
          << "  \"dt_policy\": \"" << json_escape(cfg.dt_policy) << "\",\n"
          << "  \"seed\": " << args.seed << ",\n"
          << "  \"units\": \"" << json_escape(cfg.units) << "\",\n"
-         << "  \"version\": \"slice0\",\n"
+         << "  \"version\": \"slice4\",\n"
          << "  \"steps_requested\": " << args.steps << ",\n"
          << "  \"output_every_steps\": " << args.output_every << ",\n"
          << "  \"schedule_end_step\": " << cfg.schedule_end_step << ",\n"
-         << "  \"steps_to_run\": " << ctx.steps_to_run << "\n"
+         << "  \"steps_to_run\": " << ctx.steps_to_run << ",\n"
+         << "  \"steps_completed\": " << summary.step_diagnostics.size() << ",\n"
+         << "  \"checkpoints_written\": " << summary.checkpoint_count << ",\n"
+         << "  \"pressure_iterations\": " << last.pressure_solve.iterations << ",\n"
+         << "  \"pressure_relative_residual\": " << last.pressure_solve.relative_residual << ",\n"
+         << "  \"transport_dt_days\": " << last.transport.dt_days << ",\n"
+         << "  \"transport_clip_count\": " << last.transport.clip_count << ",\n"
+         << "  \"transport_mass_balance_rel_last\": " << summary.mass_balance_rel_last << ",\n"
+         << "  \"transport_mass_balance_rel_max\": " << summary.mass_balance_rel_max << ",\n"
+         << "  \"transport_mass_balance_rel_cumulative\": " << summary.mass_balance_rel_cumulative << ",\n"
+         << "  \"step_retries_total\": " << summary.step_retries_total << ",\n"
+         << "  \"step_retries_max\": " << summary.step_retries_max << "\n"
          << "}\n";
     meta.close();
     if (!meta) {
@@ -241,66 +289,372 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
     }
 }
 
-void write_logs(const OutputContext& ctx) {
+void write_logs(const OutputContext& ctx, const RunSummary& summary) {
     const fs::path log_path = ctx.out_dir / "logs.txt";
     std::ofstream logs(log_path);
     if (!logs.is_open()) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "Unable to write file: " + log_path.string());
     }
-    logs << "slice0: validation-only run; no physics execution.\n"
-         << "artifacts: initialized state arrays and placeholder timing/well rates emitted.\n";
+    const RunDiagnostics last = summary.step_diagnostics.empty() ? RunDiagnostics{} : summary.step_diagnostics.back();
+    int total_pressure_iterations = 0;
+    int total_transport_clips = 0;
+    int total_step_retries = 0;
+    int max_step_retries = 0;
+    for (const RunDiagnostics& diagnostics : summary.step_diagnostics) {
+        total_pressure_iterations += diagnostics.pressure_solve.iterations;
+        total_transport_clips += diagnostics.transport.clip_count;
+        total_step_retries += diagnostics.retries_used;
+        max_step_retries = std::max(max_step_retries, diagnostics.retries_used);
+    }
+    logs << "slice4: pressure system assembled and solved with CPU CG + Jacobi.\n"
+         << "steps_completed: " << summary.step_diagnostics.size() << "\n"
+         << "checkpoints_written: " << summary.checkpoint_count << "\n"
+         << "pressure_iterations_last: " << last.pressure_solve.iterations << "\n"
+         << "pressure_iterations_total: " << total_pressure_iterations << "\n"
+         << "pressure_relative_residual_last: " << last.pressure_solve.relative_residual << "\n"
+         << "transport_dt_days_last: " << last.transport.dt_days << "\n"
+         << "transport_clip_count_last: " << last.transport.clip_count << "\n"
+         << "transport_clip_count_total: " << total_transport_clips << "\n"
+         << "transport_mass_balance_rel_last: " << summary.mass_balance_rel_last << "\n"
+         << "transport_mass_balance_rel_max: " << summary.mass_balance_rel_max << "\n"
+         << "transport_mass_balance_rel_cumulative: " << summary.mass_balance_rel_cumulative << "\n"
+         << "step_retries_total: " << total_step_retries << "\n"
+         << "step_retries_max: " << max_step_retries << "\n";
+    logs << "per_step_stats:\n";
+    logs << "step retries p_residual   dt_days mass_bal clip inj_rate prod_rate inj_bhp prod_bhp p_avg  p_min  p_max  sw_avg  sw_min  sw_max\n";
+    for (size_t step = 0; step < summary.step_diagnostics.size(); ++step) {
+        const RunDiagnostics& d = summary.step_diagnostics[step];
+        logs << std::setw(4) << step << " "
+             << std::setw(7) << d.retries_used << " "
+             << std::setw(10) << std::scientific << std::setprecision(3) << d.pressure_solve.relative_residual << " "
+             << std::fixed << std::setprecision(4) << std::setw(7) << d.transport.dt_days << " "
+             << std::scientific << std::setprecision(3) << std::setw(8) << d.transport.mass_balance_rel << " "
+             << std::fixed << std::setprecision(0) << std::setw(4) << d.transport.clip_count << " "
+             << std::fixed << std::setprecision(3) << std::setw(8) << d.well_rates_step[0] << " "
+             << std::setw(9) << d.well_rates_step[1] << " "
+             << std::setprecision(2) << std::setw(7) << d.well_bhp_step[0] << " "
+             << std::setw(8) << d.well_bhp_step[1] << " "
+             << std::fixed << std::setprecision(2) << std::setw(6) << d.pressure_avg << " "
+             << std::setw(6) << d.pressure_min << " "
+             << std::setw(6) << d.pressure_max << " "
+             << std::setprecision(4) << std::setw(7) << d.sw_avg << " "
+             << std::setw(7) << d.sw_min << " "
+             << std::setw(7) << d.sw_max << "\n";
+    }
     logs.close();
     if (!logs) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "I/O failure while writing: " + log_path.string());
     }
 }
 
-void write_state_outputs(const OutputContext& ctx, const ReservoirState& state) {
+void write_state_outputs(const OutputContext& ctx, const ReservoirState& state, const RunSummary& summary) {
     const std::vector<size_t> state_shape = {
-        1U,
+        static_cast<size_t>(summary.checkpoint_count),
         static_cast<size_t>(state.ny),
         static_cast<size_t>(state.nx),
     };
-    write_npy_f64(ctx.out_dir / "state_pressure.npy", state_shape, state.pressure);
-    write_npy_f64(ctx.out_dir / "state_sw.npy", state_shape, state.sw);
+    write_npy_f64(ctx.out_dir / "state_pressure.npy", state_shape, summary.pressure_history);
+    write_npy_f64(ctx.out_dir / "state_sw.npy", state_shape, summary.sw_history);
 }
 
-void write_well_rates(const OutputContext& ctx) {
-    // Slice 0 has no well solve; keep a stable placeholder array shape for downstream readers.
-    const std::vector<double> well_rates = {0.0, 0.0};
-    write_npy_f64(ctx.out_dir / "well_rates.npy", {1U, 2U}, well_rates);
+void write_well_outputs(const OutputContext& ctx, const RunSummary& summary) {
+    write_npy_f64(
+        ctx.out_dir / "well_rates.npy",
+        {static_cast<size_t>(summary.checkpoint_count), 2U},
+        summary.well_rates_history);
+    write_npy_f64(
+        ctx.out_dir / "well_bhp.npy",
+        {static_cast<size_t>(summary.checkpoint_count), 2U},
+        summary.well_bhp_history);
 }
 
-void write_timing_csv(const OutputContext& ctx) {
+void write_timing_csv(const OutputContext& ctx, const RunSummary& summary) {
     const fs::path timing_path = ctx.out_dir / "timing.csv";
     std::ofstream timing(timing_path);
     if (!timing.is_open()) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "Unable to write file: " + timing_path.string());
     }
     timing << "run_id,row_type,step_idx,dt_days,pressure_time_s,transport_time_s,io_time_s,total_time_s\n";
-    timing << ctx.run_id << ",aggregate,-1,0,0,0,0,0\n";
+    double dt_total = 0.0;
+    double pressure_total = 0.0;
+    double transport_total = 0.0;
+    for (size_t step = 0; step < summary.step_diagnostics.size(); ++step) {
+        const RunDiagnostics& diagnostics = summary.step_diagnostics[step];
+        const double total_time_s = diagnostics.pressure_time_s + diagnostics.transport_time_s;
+        dt_total += diagnostics.transport.dt_days;
+        pressure_total += diagnostics.pressure_time_s;
+        transport_total += diagnostics.transport_time_s;
+        timing << ctx.run_id << ",step," << step << "," << diagnostics.transport.dt_days
+               << "," << diagnostics.pressure_time_s << "," << diagnostics.transport_time_s
+               << ",0," << total_time_s << "\n";
+    }
+    timing << ctx.run_id << ",aggregate,-1," << dt_total << "," << pressure_total
+           << "," << transport_total << ",0," << (pressure_total + transport_total) << "\n";
     timing.close();
     if (!timing) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "I/O failure while writing: " + timing_path.string());
     }
 }
 
-void write_required_outputs(const OutputContext& ctx, const Args& args, const SimulationConfig& cfg, const ReservoirState& state) {
-    write_meta_json(ctx, args, cfg);
-    write_logs(ctx);
-    write_state_outputs(ctx, state);
-    write_well_rates(ctx);
-    write_timing_csv(ctx);
+void write_step_stats_csv(const OutputContext& ctx, const RunSummary& summary) {
+    const fs::path stats_path = ctx.out_dir / "step_stats.csv";
+    std::ofstream stats(stats_path);
+    if (!stats.is_open()) {
+        emit_and_exit(ExitCode::E_IO, "E_IO", "Unable to write file: " + stats_path.string());
+    }
+    stats << "run_id,step_idx,retries_used,pressure_iterations,pressure_relative_residual,dt_days,mass_balance_rel,"
+             "clip_count,pressure_avg,pressure_min,pressure_max,sw_avg,sw_min,sw_max,inj_rate,prod_rate,inj_bhp,prod_bhp,"
+             "pressure_time_s,transport_time_s,total_time_s\n";
+    for (size_t step = 0; step < summary.step_diagnostics.size(); ++step) {
+        const RunDiagnostics& d = summary.step_diagnostics[step];
+        const double total_time_s = d.pressure_time_s + d.transport_time_s;
+        stats << ctx.run_id << "," << step << "," << d.retries_used << "," << d.pressure_solve.iterations
+              << "," << d.pressure_solve.relative_residual << "," << d.transport.dt_days << "," << d.transport.mass_balance_rel
+              << "," << d.transport.clip_count << "," << d.pressure_avg << "," << d.pressure_min << "," << d.pressure_max
+              << "," << d.sw_avg << "," << d.sw_min << "," << d.sw_max
+              << "," << d.well_rates_step[0] << "," << d.well_rates_step[1]
+              << "," << d.well_bhp_step[0] << "," << d.well_bhp_step[1] << "," << d.pressure_time_s
+              << "," << d.transport_time_s << "," << total_time_s << "\n";
+    }
+    stats.close();
+    if (!stats) {
+        emit_and_exit(ExitCode::E_IO, "E_IO", "I/O failure while writing: " + stats_path.string());
+    }
+}
+
+void write_step_stats_pretty(const OutputContext& ctx, const RunSummary& summary) {
+    const fs::path pretty_path = ctx.out_dir / "step_stats.txt";
+    std::ofstream pretty(pretty_path);
+    if (!pretty.is_open()) {
+        emit_and_exit(ExitCode::E_IO, "E_IO", "Unable to write file: " + pretty_path.string());
+    }
+    pretty << "Step-wise Simulation Stats\n";
+    pretty << "==========================\n";
+    pretty << "run_id: " << ctx.run_id << "\n\n";
+    pretty << " step retries  p_iter   p_residual      dt_days      mass_bal  clip"
+              "   inj_rate  prod_rate   inj_bhp  prod_bhp"
+              "     p_avg     p_min     p_max    sw_avg    sw_min    sw_max  total_t[s]\n";
+    for (size_t step = 0; step < summary.step_diagnostics.size(); ++step) {
+        const RunDiagnostics& d = summary.step_diagnostics[step];
+        const double total_time_s = d.pressure_time_s + d.transport_time_s;
+        pretty << std::setw(5) << step
+               << std::setw(8) << d.retries_used
+               << std::setw(8) << d.pressure_solve.iterations
+               << std::setw(14) << std::scientific << std::setprecision(3) << d.pressure_solve.relative_residual
+               << std::setw(13) << std::fixed << std::setprecision(4) << d.transport.dt_days
+               << std::setw(14) << std::scientific << std::setprecision(3) << d.transport.mass_balance_rel
+               << std::setw(6) << std::fixed << std::setprecision(0) << d.transport.clip_count
+               << std::setw(11) << std::fixed << std::setprecision(3) << d.well_rates_step[0]
+               << std::setw(11) << d.well_rates_step[1]
+               << std::setw(10) << std::setprecision(2) << d.well_bhp_step[0]
+               << std::setw(10) << d.well_bhp_step[1]
+               << std::setw(10) << std::fixed << std::setprecision(2) << d.pressure_avg
+               << std::setw(10) << d.pressure_min
+               << std::setw(10) << d.pressure_max
+               << std::setw(10) << std::setprecision(4) << d.sw_avg
+               << std::setw(10) << d.sw_min
+               << std::setw(10) << d.sw_max
+               << std::setw(12) << std::setprecision(6) << total_time_s << "\n";
+    }
+    pretty.close();
+    if (!pretty) {
+        emit_and_exit(ExitCode::E_IO, "E_IO", "I/O failure while writing: " + pretty_path.string());
+    }
+}
+
+void write_required_outputs(
+    const OutputContext& ctx,
+    const Args& args,
+    const SimulationConfig& cfg,
+    const ReservoirState& state,
+    const RunSummary& summary) {
+    write_meta_json(ctx, args, cfg, summary);
+    write_logs(ctx, summary);
+    write_state_outputs(ctx, state, summary);
+    write_well_outputs(ctx, summary);
+    write_timing_csv(ctx, summary);
+    write_step_stats_csv(ctx, summary);
+    write_step_stats_pretty(ctx, summary);
+}
+
+std::pair<std::vector<double>, std::vector<double>> compute_well_step_metrics(
+    const SimulationConfig& cfg,
+    const ReservoirState& state) {
+    constexpr double kWellRateScale = 1.0e-3;
+    std::vector<double> rates(2U, 0.0);
+    std::vector<double> bhp(2U, 0.0);
+    if (!cfg.wells.enabled) {
+        return {rates, bhp};
+    }
+    const size_t injector_idx = static_cast<size_t>(cfg.wells.injector_cell_y) * static_cast<size_t>(cfg.nx) +
+                                static_cast<size_t>(cfg.wells.injector_cell_x);
+    const size_t producer_idx = static_cast<size_t>(cfg.wells.producer_cell_y) * static_cast<size_t>(cfg.nx) +
+                                static_cast<size_t>(cfg.wells.producer_cell_x);
+
+    const double q_inj = kWellRateScale * cfg.wells.injector_rate_stb_day;
+    const double drawdown = std::max(state.pressure[producer_idx] - cfg.wells.producer_bhp_psi, 0.0);
+    const double q_prod = -kWellRateScale * cfg.wells.producer_pi * drawdown;
+
+    rates[0] = q_inj;
+    rates[1] = q_prod;
+    bhp[0] = state.pressure[injector_idx];
+    bhp[1] = cfg.wells.producer_bhp_psi;
+    return {rates, bhp};
+}
+
+RunDiagnostics run_step_with_retry_policy(const SimulationConfig& cfg, ReservoirState& state) {
+    constexpr double kPressureResidualTol = 1.0e-8;
+    constexpr int kPressureMaxIterations = 500;
+    constexpr int kRetryBudget = 5;
+    constexpr double kRetryDtScale = 0.5;
+    constexpr double kMassBalanceTol = 1.0e-6;
+    const bool force_step_acceptance_fail = []() {
+        const char* raw = std::getenv("SIM_FORCE_STEP_ACCEPTANCE_FAIL");
+        return raw != nullptr && std::string(raw) == "1";
+    }();
+
+    const ReservoirState state_start = state;
+    const double cfl_dt_days = compute_transport_cfl_dt_days(cfg, state_start);
+    double trial_dt_days = cfl_dt_days;
+    RunDiagnostics last_attempt;
+
+    for (int retry = 0; retry <= kRetryBudget; ++retry) {
+        state = state_start;
+
+        const auto pressure_start = std::chrono::steady_clock::now();
+        PressureSystem system = assemble_pressure_system(cfg, state);
+        apply_pressure_gauge(system, 0, state.pressure.front());
+        const PressureSolveResult solve = solve_pressure_cg_jacobi(system, state.pressure, kPressureResidualTol, kPressureMaxIterations);
+        state.pressure = solve.pressure;
+        const auto pressure_end = std::chrono::steady_clock::now();
+
+        const auto transport_start = std::chrono::steady_clock::now();
+        const TransportDiagnostics transport = advance_saturation_impes_with_dt(cfg, state, trial_dt_days);
+        const auto transport_end = std::chrono::steady_clock::now();
+
+        RunDiagnostics diagnostics;
+        diagnostics.pressure_solve = solve;
+        diagnostics.pressure_time_s = std::chrono::duration<double>(pressure_end - pressure_start).count();
+        diagnostics.transport = transport;
+        diagnostics.transport_time_s = std::chrono::duration<double>(transport_end - transport_start).count();
+        diagnostics.retries_used = retry;
+        const auto [pmin_it, pmax_it] = std::minmax_element(state.pressure.begin(), state.pressure.end());
+        const auto [swmin_it, swmax_it] = std::minmax_element(state.sw.begin(), state.sw.end());
+        double psum = 0.0;
+        double swsum = 0.0;
+        for (double v : state.pressure) {
+            psum += v;
+        }
+        for (double v : state.sw) {
+            swsum += v;
+        }
+        const double cell_count = static_cast<double>(state.pressure.size());
+        diagnostics.pressure_avg = psum / cell_count;
+        diagnostics.pressure_min = *pmin_it;
+        diagnostics.pressure_max = *pmax_it;
+        diagnostics.sw_avg = swsum / cell_count;
+        diagnostics.sw_min = *swmin_it;
+        diagnostics.sw_max = *swmax_it;
+        const auto [well_rates_step, well_bhp_step] = compute_well_step_metrics(cfg, state);
+        diagnostics.well_rates_step = std::move(well_rates_step);
+        diagnostics.well_bhp_step = std::move(well_bhp_step);
+        if (force_step_acceptance_fail) {
+            diagnostics.transport.mass_balance_rel = kMassBalanceTol * 10.0;
+        }
+        last_attempt = diagnostics;
+
+        const bool pressure_ok = diagnostics.pressure_solve.relative_residual <= kPressureResidualTol;
+        const bool mass_ok = diagnostics.transport.mass_balance_rel <= kMassBalanceTol;
+        if (pressure_ok && mass_ok) {
+            return diagnostics;
+        }
+
+        trial_dt_days *= kRetryDtScale;
+    }
+
+    throw CliError(
+        ExitCode::E_CASE_SCHEMA,
+        "E_CASE_SCHEMA",
+        "Step acceptance failed after retry budget; pressure_relative_residual=" +
+            std::to_string(last_attempt.pressure_solve.relative_residual) +
+            ", mass_balance_rel=" + std::to_string(last_attempt.transport.mass_balance_rel) + ".");
+}
+
+bool should_write_checkpoint(int step_idx, int steps_to_run, int output_every) {
+    const int one_based = step_idx + 1;
+    return (one_based % output_every == 0) || (one_based == steps_to_run);
+}
+
+RunSummary execute_time_loop(const SimulationConfig& cfg, ReservoirState& state, const OutputContext& ctx, int output_every) {
+    RunSummary summary;
+    const size_t cells_per_state = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny);
+
+    for (int step = 0; step < ctx.steps_to_run; ++step) {
+        const RunDiagnostics diagnostics = run_step_with_retry_policy(cfg, state);
+        summary.step_diagnostics.push_back(diagnostics);
+        summary.mass_balance_rel_last = diagnostics.transport.mass_balance_rel;
+        summary.mass_balance_rel_max = std::max(summary.mass_balance_rel_max, diagnostics.transport.mass_balance_rel);
+        summary.mass_balance_rel_cumulative += diagnostics.transport.mass_balance_rel;
+        summary.step_retries_total += diagnostics.retries_used;
+        summary.step_retries_max = std::max(summary.step_retries_max, diagnostics.retries_used);
+
+        if (should_write_checkpoint(step, ctx.steps_to_run, output_every)) {
+            summary.pressure_history.insert(summary.pressure_history.end(), state.pressure.begin(), state.pressure.end());
+            summary.sw_history.insert(summary.sw_history.end(), state.sw.begin(), state.sw.end());
+            summary.well_rates_history.insert(
+                summary.well_rates_history.end(),
+                diagnostics.well_rates_step.begin(),
+                diagnostics.well_rates_step.end());
+            summary.well_bhp_history.insert(
+                summary.well_bhp_history.end(),
+                diagnostics.well_bhp_step.begin(),
+                diagnostics.well_bhp_step.end());
+            ++summary.checkpoint_count;
+        }
+    }
+
+    if (summary.checkpoint_count == 0) {
+        RunDiagnostics fallback_diagnostics;
+        fallback_diagnostics.well_rates_step = {0.0, 0.0};
+        fallback_diagnostics.well_bhp_step = {0.0, 0.0};
+        if (!summary.step_diagnostics.empty()) {
+            fallback_diagnostics = summary.step_diagnostics.back();
+        }
+        summary.pressure_history.insert(summary.pressure_history.end(), state.pressure.begin(), state.pressure.end());
+        summary.sw_history.insert(summary.sw_history.end(), state.sw.begin(), state.sw.end());
+        summary.well_rates_history.insert(
+            summary.well_rates_history.end(),
+            fallback_diagnostics.well_rates_step.begin(),
+            fallback_diagnostics.well_rates_step.end());
+        summary.well_bhp_history.insert(
+            summary.well_bhp_history.end(),
+            fallback_diagnostics.well_bhp_step.begin(),
+            fallback_diagnostics.well_bhp_step.end());
+        summary.checkpoint_count = 1;
+    }
+
+    const size_t expected_count = static_cast<size_t>(summary.checkpoint_count) * cells_per_state;
+    if (summary.pressure_history.size() != expected_count || summary.sw_history.size() != expected_count) {
+        emit_and_exit(ExitCode::E_IO, "E_IO", "State checkpoint history has inconsistent shape.");
+    }
+    const size_t expected_well_count = static_cast<size_t>(summary.checkpoint_count) * 2U;
+    if (summary.well_rates_history.size() != expected_well_count || summary.well_bhp_history.size() != expected_well_count) {
+        emit_and_exit(ExitCode::E_IO, "E_IO", "Well checkpoint history has inconsistent shape.");
+    }
+
+    return summary;
 }
 
 int main(int argc, char** argv) {
     try {
         const Args args = parse_args(argc, argv);
         const SimulationConfig cfg = load_simulation_config(args.case_path);
-        const ReservoirState state = initialize_state(cfg);
-        validate_state_invariants(state);
         const OutputContext ctx = prepare_output_context(args, cfg.schedule_end_step);
-        write_required_outputs(ctx, args, cfg, state);
+        ReservoirState state = initialize_state(cfg);
+        validate_state_invariants(state);
+        const RunSummary summary = execute_time_loop(cfg, state, ctx, args.output_every);
+        validate_state_invariants(state);
+        write_required_outputs(ctx, args, cfg, state, summary);
         return static_cast<int>(ExitCode::SUCCESS);
     } catch (const CliError& e) {
         emit_and_exit(e.code(), e.symbol(), e.what());
