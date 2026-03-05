@@ -60,13 +60,6 @@ SIM_SEED=7
 SIM_OUT_DIR=auto
 EOF
 
-cat > "$MODEL_DIR/run" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../tools/model_run.sh" "$@"
-EOF
-chmod +x "$MODEL_DIR/run"
-
 echo "Created: $MODEL_DIR"
 echo "Edit: $MODEL_FILE"
-echo "Run:  cd cases/$MODEL_NAME && ./run"
+echo "Run:  ./workflow run --model $MODEL_NAME"

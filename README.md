@@ -65,15 +65,16 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - MP4 animations of field evolution.
 - Technical report with physics, numerics, optimization, and ML findings.
 
-## Build Tooling (Custom MCP-Style)
+## Workflow Paths
 
-Fastest workflow:
+Manual path (single entry point from repo root):
 
 ```bash
-./build     # debug cpu build
-./test      # debug cpu build + tests
-./tools/new_model hetero_32x32
-cd cases/model1 && ./run
+./workflow compile --mode debug --cuda off
+./workflow run --model model1 --steps 10 --mode release
+./workflow plot --model model1
+./workflow clean --model model1 --keep 3 --apply
+./workflow all --model model1 --steps 10 --seed 7
 ```
 
 Model convention:
@@ -87,20 +88,6 @@ Examples:
 - `cases/model1/model.yaml`
 - `cases/model2/model.yaml`
 - `cases/model3/model.yaml`
-
-Use the local custom build tool (advanced options):
-
-```bash
-tools/mcp_tools.sh compile --mode debug --cuda off
-tools/mcp_tools.sh compile --mode release --cuda on --tests
-tools/mcp_tools.sh compile --mode release --cuda auto --clean
-```
-
-Options:
-- `--mode debug|release`
-- `--cuda auto|on|off`
-- `--clean`
-- `--tests`
 
 Notes:
 - Requires `cmake`.
@@ -127,3 +114,22 @@ Validate run artifacts only (no figure generation):
 ```bash
 tools/plot_run.sh --run cases/model1/outputs/<run_id> --check-only
 ```
+
+## MCP Server (LLM Tooling)
+
+This repo now includes a real MCP server that exposes compile/run/plot/clean tools:
+
+```bash
+.venv/bin/pip install mcp
+python3 tools/mcp_server.py
+```
+
+Exposed MCP tools:
+- `compile_code`
+- `run_model`
+- `plot_run`
+- `clean_outputs`
+- `all_in_one`
+
+Example MCP-style intent:
+- "Compile and run model1 for 10 steps, then plot" -> call `all_in_one(model=\"model1\", steps=10)`

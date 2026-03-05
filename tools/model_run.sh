@@ -2,13 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODEL_DIR="$(pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-if [[ ! -f "$MODEL_DIR/model.yaml" ]]; then
-  echo "model.yaml not found in $MODEL_DIR" >&2
-  exit 2
-fi
+MODEL_DIR="$(pwd)"
 
 MODE="release"
 BACKEND="cpu"
@@ -16,6 +11,44 @@ STEPS="10"
 OUTPUT_EVERY="1"
 SEED="7"
 OUT_DIR="auto"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--out path]
+
+Defaults come from run.env in the selected model folder.
+CLI arguments override run.env values.
+USAGE
+}
+
+# Pass 1: only discover --model-dir so we can load the right run.env.
+pass1=("$@")
+idx=0
+while [[ $idx -lt ${#pass1[@]} ]]; do
+  arg="${pass1[$idx]}"
+  if [[ "$arg" == "--model-dir" ]]; then
+    idx=$((idx + 1))
+    if [[ $idx -ge ${#pass1[@]} ]]; then
+      echo "Missing value for --model-dir" >&2
+      exit 2
+    fi
+    MODEL_DIR="${pass1[$idx]}"
+  fi
+  idx=$((idx + 1))
+done
+
+if [[ "$MODEL_DIR" != /* ]]; then
+  MODEL_DIR="$(pwd)/$MODEL_DIR"
+fi
+if [[ ! -d "$MODEL_DIR" ]]; then
+  echo "Model directory not found: $MODEL_DIR" >&2
+  exit 2
+fi
+if [[ ! -f "$MODEL_DIR/model.yaml" ]]; then
+  echo "model.yaml not found in $MODEL_DIR" >&2
+  exit 2
+fi
 
 if [[ -f "$MODEL_DIR/run.env" ]]; then
   # shellcheck disable=SC1091
@@ -28,8 +61,10 @@ if [[ -f "$MODEL_DIR/run.env" ]]; then
   OUT_DIR="${SIM_OUT_DIR:-$OUT_DIR}"
 fi
 
+# Pass 2: apply all CLI options (override run.env/defaults).
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --model-dir) MODEL_DIR="${2:-}"; shift 2 ;;
     --mode) MODE="${2:-}"; shift 2 ;;
     --backend) BACKEND="${2:-}"; shift 2 ;;
     --steps) STEPS="${2:-}"; shift 2 ;;
@@ -37,12 +72,7 @@ while [[ $# -gt 0 ]]; do
     --seed) SEED="${2:-}"; shift 2 ;;
     --out) OUT_DIR="${2:-}"; shift 2 ;;
     -h|--help)
-      cat <<'EOF'
-Usage:
-  ./run [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--out path]
-
-Defaults come from run.env in this model folder.
-EOF
+      usage
       exit 0
       ;;
     *)
@@ -51,6 +81,18 @@ EOF
       ;;
   esac
 done
+
+if [[ "$MODEL_DIR" != /* ]]; then
+  MODEL_DIR="$(pwd)/$MODEL_DIR"
+fi
+if [[ ! -d "$MODEL_DIR" ]]; then
+  echo "Model directory not found: $MODEL_DIR" >&2
+  exit 2
+fi
+if [[ ! -f "$MODEL_DIR/model.yaml" ]]; then
+  echo "model.yaml not found in $MODEL_DIR" >&2
+  exit 2
+fi
 
 if [[ "$MODE" != "debug" && "$MODE" != "release" ]]; then
   echo "Invalid mode: $MODE (debug|release)" >&2
@@ -69,9 +111,9 @@ BIN="$ROOT_DIR/core-cpp/build/${MODE}-${BIN_FLAVOR}/sim_run"
 
 if [[ ! -x "$BIN" ]]; then
   if [[ "$BACKEND" == "cpu" ]]; then
-    "$ROOT_DIR/build" "$MODE" >/dev/null
+    "$ROOT_DIR/tools/compile_tool.sh" --mode "$MODE" --cuda off >/dev/null
   else
-    "$ROOT_DIR/tools/mcp_tools.sh" --mode "$MODE" --cuda on >/dev/null
+    "$ROOT_DIR/tools/compile_tool.sh" --mode "$MODE" --cuda on >/dev/null
   fi
 fi
 
