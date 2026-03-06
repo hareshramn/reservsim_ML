@@ -1,0 +1,16 @@
+# Surrogate training config (simple YAML subset).
+model_name: "cell_mlp_demo"
+model_type: "cell_mlp_v1"
+
+# Dataset split at transition level.
+split_train: 0.7
+split_val: 0.15
+mass_epsilon: 1e-12
+
+# Neural model/training settings.
+hidden_dim: 32
+epochs: 80
+learning_rate: 0.001
+batch_transitions: 8
+loss_weight_p: 1.0
+loss_weight_sw: 1.0
