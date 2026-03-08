@@ -271,3 +271,17 @@ TransportDiagnostics advance_saturation_impes_with_dt(const SimulationConfig& cf
     const double mass_balance_rel = mass_delta_abs / mass_denom;
     return TransportDiagnostics{dt_days, clip_count, mass_balance_rel};
 }
+
+bool gpu_transport_enabled() {
+#if SIM_ENABLE_CUDA
+    return true;
+#else
+    return false;
+#endif
+}
+
+#if !SIM_ENABLE_CUDA
+TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig&, ReservoirState&, double) {
+    fail("GPU transport backend requested, but CUDA support is disabled in this build.");
+}
+#endif

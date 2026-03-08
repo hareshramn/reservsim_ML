@@ -16,3 +16,5 @@ std::vector<double> compute_total_flux_y(const SimulationConfig& cfg, const Rese
 double compute_transport_cfl_dt_days(const SimulationConfig& cfg, const ReservoirState& state);
 TransportDiagnostics advance_saturation_impes_with_dt(const SimulationConfig& cfg, ReservoirState& state, double dt_days);
 TransportDiagnostics advance_saturation_impes(const SimulationConfig& cfg, ReservoirState& state);
+TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig& cfg, ReservoirState& state, double dt_days);
+bool gpu_transport_enabled();

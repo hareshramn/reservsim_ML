@@ -502,7 +502,7 @@ std::pair<std::vector<double>, std::vector<double>> compute_well_step_metrics(
     return {rates, bhp};
 }
 
-RunDiagnostics run_step_with_retry_policy(const SimulationConfig& cfg, ReservoirState& state) {
+RunDiagnostics run_step_with_retry_policy(const SimulationConfig& cfg, ReservoirState& state, const std::string& backend) {
     constexpr double kPressureResidualTol = 1.0e-8;
     constexpr int kPressureMaxIterations = 500;
     constexpr int kRetryBudget = 5;
@@ -529,7 +529,9 @@ RunDiagnostics run_step_with_retry_policy(const SimulationConfig& cfg, Reservoir
         const auto pressure_end = std::chrono::steady_clock::now();
 
         const auto transport_start = std::chrono::steady_clock::now();
-        const TransportDiagnostics transport = advance_saturation_impes_with_dt(cfg, state, trial_dt_days);
+        const TransportDiagnostics transport = (backend == "gpu")
+                                                  ? advance_saturation_impes_with_dt_gpu(cfg, state, trial_dt_days)
+                                                  : advance_saturation_impes_with_dt(cfg, state, trial_dt_days);
         const auto transport_end = std::chrono::steady_clock::now();
 
         RunDiagnostics diagnostics;
@@ -585,12 +587,17 @@ bool should_write_checkpoint(int step_idx, int steps_to_run, int output_every) {
     return (one_based % output_every == 0) || (one_based == steps_to_run);
 }
 
-RunSummary execute_time_loop(const SimulationConfig& cfg, ReservoirState& state, const OutputContext& ctx, int output_every) {
+RunSummary execute_time_loop(
+    const SimulationConfig& cfg,
+    ReservoirState& state,
+    const OutputContext& ctx,
+    int output_every,
+    const std::string& backend) {
     RunSummary summary;
     const size_t cells_per_state = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny);
 
     for (int step = 0; step < ctx.steps_to_run; ++step) {
-        const RunDiagnostics diagnostics = run_step_with_retry_policy(cfg, state);
+        const RunDiagnostics diagnostics = run_step_with_retry_policy(cfg, state, backend);
         summary.step_diagnostics.push_back(diagnostics);
         summary.mass_balance_rel_last = diagnostics.transport.mass_balance_rel;
         summary.mass_balance_rel_max = std::max(summary.mass_balance_rel_max, diagnostics.transport.mass_balance_rel);
@@ -648,11 +655,17 @@ RunSummary execute_time_loop(const SimulationConfig& cfg, ReservoirState& state,
 int main(int argc, char** argv) {
     try {
         const Args args = parse_args(argc, argv);
+        if (args.backend == "gpu" && !gpu_transport_enabled()) {
+            emit_and_exit(
+                ExitCode::E_ARG_INVALID,
+                "E_ARG_INVALID",
+                "backend=gpu requested but CUDA transport is not enabled in this build.");
+        }
         const SimulationConfig cfg = load_simulation_config(args.case_path);
         const OutputContext ctx = prepare_output_context(args, cfg.schedule_end_step);
         ReservoirState state = initialize_state(cfg);
         validate_state_invariants(state);
-        const RunSummary summary = execute_time_loop(cfg, state, ctx, args.output_every);
+        const RunSummary summary = execute_time_loop(cfg, state, ctx, args.output_every, args.backend);
         validate_state_invariants(state);
         write_required_outputs(ctx, args, cfg, state, summary);
         return static_cast<int>(ExitCode::SUCCESS);
