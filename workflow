@@ -12,12 +12,27 @@ Commands:
   compile|build [compile options]
       Delegate to tools/compile_tool.sh.
 
+  doctor
+      Check local toolchain and Python deps needed by this repo.
+
+  gpu-check --model <modelN> [gpu-check options]
+      Probe CUDA readiness with a tiny GPU run.
+
   run --model <modelN> [run options]
       Run one model from repo root.
-      Run options: --mode --backend --steps --output-every --seed --out
+      Run options: --mode --backend --steps --output-every --seed --out --gpu-init-retries
 
   plot --model <modelN> [--run <run_id_or_path>] [--out <dir>] [--check-only]
       Plot a run; if --run is omitted, latest run under cases/<model>/outputs is used.
+
+  validate --run <run_id_or_path>
+      Validate required run artifacts and schema contracts.
+
+  parity --model <modelN> --seed <N> [--cpu-run <id_or_path>] [--gpu-run <id_or_path>]
+      Compare latest CPU/GPU artifacts and report parity metrics.
+
+  bench --model <modelN> [bench options]
+      Execute CPU/GPU matrix and write benchmark_summary.csv.
 
   clean [--model <modelN> | --all] [--keep <N>] [--apply]
       Clean output directories.
@@ -30,6 +45,7 @@ Commands:
         --steps <N>                   (default: 10)
         --output-every <N>            (default: 1)
         --seed <N>                    (default: 7)
+        --gpu-init-retries <N>        (default: 0)
         --out <path|auto>             (default: auto)
         --plot-out <dir>              (default: figs)
         --cuda <auto|on|off>          (default: backend-derived)
@@ -39,7 +55,12 @@ Commands:
 
 Examples:
   ./workflow compile --mode debug --cuda off
+  ./workflow doctor
+  ./workflow gpu-check --model model1 --mode release --seed 7
   ./workflow run --model model1 --steps 10 --mode release
+  ./workflow validate --run cases/model1/outputs/<run_id>
+  ./workflow parity --model model1 --seed 7
+  ./workflow bench --model model1 --seeds 1,2,3 --steps 50
   ./workflow plot --model model1
   ./workflow clean --model model1 --keep 3 --apply
   ./workflow all --model model1 --steps 10 --seed 7
@@ -93,6 +114,36 @@ case "$cmd" in
     exec "$ROOT_DIR/tools/compile_tool.sh" "$@"
     ;;
 
+  doctor)
+    exec "$ROOT_DIR/tools/doctor.sh" "$@"
+    ;;
+
+  gpu-check)
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+      exec "$ROOT_DIR/tools/gpu_check.sh" --help
+    fi
+    model=""
+    args=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model)
+          model="${2:-}"
+          shift 2
+          ;;
+        *)
+          args+=("$1")
+          shift
+          ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+    exec "$ROOT_DIR/tools/gpu_check.sh" --model-dir "$model_dir" "${args[@]}"
+    ;;
+
   run)
     model=""
     run_args=()
@@ -114,6 +165,39 @@ case "$cmd" in
     fi
     model_dir="$(resolve_model_dir "$model")"
     exec "$ROOT_DIR/tools/model_run.sh" --model-dir "$model_dir" "${run_args[@]}"
+    ;;
+
+  validate)
+    exec "$ROOT_DIR/tools/validate_run.py" "$@"
+    ;;
+
+  parity)
+    exec "$ROOT_DIR/tools/parity_report.py" "$@"
+    ;;
+
+  bench)
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+      exec "$ROOT_DIR/tools/benchmark_matrix.py" --help
+    fi
+    model=""
+    args=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model)
+          model="${2:-}"
+          shift 2
+          ;;
+        *)
+          args+=("$1")
+          shift
+          ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    exec "$ROOT_DIR/tools/benchmark_matrix.py" --model "$model" "${args[@]}"
     ;;
 
   plot)
@@ -176,6 +260,7 @@ case "$cmd" in
     steps="10"
     output_every="1"
     seed="7"
+    gpu_init_retries="0"
     out="auto"
     plot_out="figs"
     cuda=""
@@ -191,6 +276,7 @@ case "$cmd" in
         --steps) steps="${2:-}"; shift 2 ;;
         --output-every) output_every="${2:-}"; shift 2 ;;
         --seed) seed="${2:-}"; shift 2 ;;
+        --gpu-init-retries) gpu_init_retries="${2:-}"; shift 2 ;;
         --out) out="${2:-}"; shift 2 ;;
         --plot-out) plot_out="${2:-}"; shift 2 ;;
         --cuda) cuda="${2:-}"; shift 2 ;;
@@ -241,6 +327,7 @@ case "$cmd" in
       --steps "$steps" \
       --output-every "$output_every" \
       --seed "$seed" \
+      --gpu-init-retries "$gpu_init_retries" \
       --out "$out"
 
     run_arg=""

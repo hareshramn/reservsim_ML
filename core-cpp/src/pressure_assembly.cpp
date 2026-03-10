@@ -289,3 +289,17 @@ PressureSolveResult solve_pressure_cg_jacobi(
 
     return PressureSolveResult{std::move(x), max_iterations, relative_residual};
 }
+
+#if !SIM_ENABLE_CUDA
+PressureSolveResult solve_pressure_cg_jacobi_gpu(
+    const PressureSystem&,
+    const std::vector<double>&,
+    double,
+    int) {
+    fail("GPU pressure backend requested, but CUDA support is disabled in this build.");
+}
+
+bool gpu_pressure_enabled() {
+    return false;
+}
+#endif

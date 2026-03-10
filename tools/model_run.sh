@@ -10,12 +10,13 @@ BACKEND="cpu"
 STEPS="10"
 OUTPUT_EVERY="1"
 SEED="7"
+GPU_INIT_RETRIES="0"
 OUT_DIR="auto"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--out path]
+  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--gpu-init-retries N] [--out path]
 
 Defaults come from run.env in the selected model folder.
 CLI arguments override run.env values.
@@ -58,6 +59,7 @@ if [[ -f "$MODEL_DIR/run.env" ]]; then
   STEPS="${SIM_STEPS:-$STEPS}"
   OUTPUT_EVERY="${SIM_OUTPUT_EVERY:-$OUTPUT_EVERY}"
   SEED="${SIM_SEED:-$SEED}"
+  GPU_INIT_RETRIES="${SIM_GPU_INIT_RETRIES:-$GPU_INIT_RETRIES}"
   OUT_DIR="${SIM_OUT_DIR:-$OUT_DIR}"
 fi
 
@@ -70,6 +72,7 @@ while [[ $# -gt 0 ]]; do
     --steps) STEPS="${2:-}"; shift 2 ;;
     --output-every) OUTPUT_EVERY="${2:-}"; shift 2 ;;
     --seed) SEED="${2:-}"; shift 2 ;;
+    --gpu-init-retries) GPU_INIT_RETRIES="${2:-}"; shift 2 ;;
     --out) OUT_DIR="${2:-}"; shift 2 ;;
     -h|--help)
       usage
@@ -102,6 +105,10 @@ if [[ "$BACKEND" != "cpu" && "$BACKEND" != "gpu" ]]; then
   echo "Invalid backend: $BACKEND (cpu|gpu)" >&2
   exit 2
 fi
+if ! [[ "$GPU_INIT_RETRIES" =~ ^[0-9]+$ ]]; then
+  echo "Invalid --gpu-init-retries: $GPU_INIT_RETRIES (non-negative integer required)" >&2
+  exit 2
+fi
 
 BIN_FLAVOR="cpu"
 if [[ "$BACKEND" == "gpu" ]]; then
@@ -123,7 +130,7 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 if [[ "$OUT_DIR" == "auto" ]]; then
-  RUN_ID="$(date +%Y%m%d_%H%M%S)_${BACKEND}_${SEED}"
+  RUN_ID="$(date +%Y%m%d_%H%M%S_%3N)_${BACKEND}_${SEED}"
   OUT_DIR="$MODEL_DIR/outputs/$RUN_ID"
 else
   case "$OUT_DIR" in
@@ -131,26 +138,45 @@ else
     *) OUT_DIR="$MODEL_DIR/$OUT_DIR" ;;
   esac
 fi
-mkdir -p "$OUT_DIR"
 
 echo "Running sim_run"
 echo "  mode=$MODE backend=$BACKEND steps=$STEPS output_every=$OUTPUT_EVERY seed=$SEED"
 echo "  case=$MODEL_DIR/model.yaml"
 echo "  out=$OUT_DIR"
 
-"$BIN" \
-  --case "$MODEL_DIR/model.yaml" \
-  --backend "$BACKEND" \
-  --steps "$STEPS" \
-  --output-every "$OUTPUT_EVERY" \
-  --seed "$SEED" \
-  --out "$OUT_DIR"
-
-rc=$?
+set +e
+attempt=0
+max_attempts=1
+if [[ "$BACKEND" == "gpu" ]]; then
+  max_attempts=$((GPU_INIT_RETRIES + 1))
+fi
+while true; do
+  attempt=$((attempt + 1))
+  "$BIN" \
+    --case "$MODEL_DIR/model.yaml" \
+    --backend "$BACKEND" \
+    --steps "$STEPS" \
+    --output-every "$OUTPUT_EVERY" \
+    --seed "$SEED" \
+    --out "$OUT_DIR"
+  rc=$?
+  if [[ $rc -eq 0 ]]; then
+    break
+  fi
+  if [[ "$BACKEND" != "gpu" || $rc -ne 6 || $attempt -ge $max_attempts ]]; then
+    break
+  fi
+  echo "GPU init retry $attempt/$GPU_INIT_RETRIES after rc=$rc ..."
+  sleep 1
+done
+set -e
 if [[ $rc -eq 0 ]]; then
   echo "Run completed successfully."
   echo "Output directory: $OUT_DIR"
 else
+  if [[ -d "$OUT_DIR" ]] && [[ -z "$(ls -A "$OUT_DIR" 2>/dev/null)" ]]; then
+    rmdir "$OUT_DIR" || true
+  fi
   echo "Run failed with exit code: $rc" >&2
   echo "Output directory: $OUT_DIR" >&2
 fi

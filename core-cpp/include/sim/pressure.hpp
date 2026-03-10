@@ -30,3 +30,9 @@ PressureSolveResult solve_pressure_cg_jacobi(
     const std::vector<double>& initial_guess,
     double relative_tolerance,
     int max_iterations);
+PressureSolveResult solve_pressure_cg_jacobi_gpu(
+    const PressureSystem& system,
+    const std::vector<double>& initial_guess,
+    double relative_tolerance,
+    int max_iterations);
+bool gpu_pressure_enabled();

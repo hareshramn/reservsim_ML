@@ -19,6 +19,10 @@ namespace {
     throw CliError(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", message);
 }
 
+[[noreturn]] void fail_io(const std::string& message) {
+    throw CliError(ExitCode::E_IO, "E_IO", message);
+}
+
 void check_cuda(cudaError_t code, const char* where) {
     if (code == cudaSuccess) {
         return;
@@ -52,27 +56,6 @@ double fractional_flow_water_host(const SimulationConfig& cfg, double sw) {
     return lambda_w / lambda_t;
 }
 
-void accumulate_well_source_terms_host(
-    const SimulationConfig& cfg,
-    const ReservoirState& state,
-    std::vector<double>& q_water) {
-    if (!cfg.wells.enabled) {
-        return;
-    }
-
-    constexpr double kWellRateScale = 1.0e-3;
-    const size_t injector_idx = cell_index(cfg.wells.injector_cell_x, cfg.wells.injector_cell_y, cfg.nx);
-    const size_t producer_idx = cell_index(cfg.wells.producer_cell_x, cfg.wells.producer_cell_y, cfg.nx);
-
-    const double q_inj = kWellRateScale * cfg.wells.injector_rate_stb_day;
-    q_water[injector_idx] += q_inj;
-
-    const double drawdown = std::max(state.pressure[producer_idx] - cfg.wells.producer_bhp_psi, 0.0);
-    const double q_prod_abs = kWellRateScale * cfg.wells.producer_pi * drawdown;
-    const double q_prod_total = -q_prod_abs;
-    q_water[producer_idx] += fractional_flow_water_host(cfg, state.sw[producer_idx]) * q_prod_total;
-}
-
 double total_water_mass(const ReservoirState& state) {
     const size_t count = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny);
     double mass = 0.0;
@@ -94,7 +77,126 @@ struct DeviceTransportParams {
     double mu_o_cp;
     double sw_min;
     double sw_max;
+    int wells_enabled;
+    int injector_cell_x;
+    int injector_cell_y;
+    int producer_cell_x;
+    int producer_cell_y;
+    double injector_rate_stb_day;
+    double producer_bhp_psi;
+    double producer_pi;
 };
+
+struct DeviceBuffers {
+    double* sw = nullptr;
+    double* pressure = nullptr;
+    double* porosity = nullptr;
+    double* permeability = nullptr;
+    double* flux_x = nullptr;
+    double* flux_y = nullptr;
+    double* q_water = nullptr;
+    double* next_sw = nullptr;
+    int* clip_flags = nullptr;
+
+    ~DeviceBuffers() {
+        if (sw != nullptr) {
+            (void)cudaFree(sw);
+        }
+        if (pressure != nullptr) {
+            (void)cudaFree(pressure);
+        }
+        if (porosity != nullptr) {
+            (void)cudaFree(porosity);
+        }
+        if (permeability != nullptr) {
+            (void)cudaFree(permeability);
+        }
+        if (flux_x != nullptr) {
+            (void)cudaFree(flux_x);
+        }
+        if (flux_y != nullptr) {
+            (void)cudaFree(flux_y);
+        }
+        if (q_water != nullptr) {
+            (void)cudaFree(q_water);
+        }
+        if (next_sw != nullptr) {
+            (void)cudaFree(next_sw);
+        }
+        if (clip_flags != nullptr) {
+            (void)cudaFree(clip_flags);
+        }
+    }
+};
+
+void free_device_ptr(double*& ptr) {
+    if (ptr != nullptr) {
+        (void)cudaFree(ptr);
+        ptr = nullptr;
+    }
+}
+
+void free_device_ptr(int*& ptr) {
+    if (ptr != nullptr) {
+        (void)cudaFree(ptr);
+        ptr = nullptr;
+    }
+}
+
+template <typename T>
+void realloc_device(T*& ptr, size_t bytes, const char* where) {
+    free_device_ptr(ptr);
+    if (bytes == 0U) {
+        return;
+    }
+    check_cuda(cudaMalloc(&ptr, bytes), where);
+}
+
+struct TransportGpuWorkspace {
+    DeviceBuffers d;
+    int nx = -1;
+    int ny = -1;
+    size_t cell_count = 0;
+    size_t flux_x_count = 0;
+    size_t flux_y_count = 0;
+    const double* porosity_ptr = nullptr;
+    const double* permeability_ptr = nullptr;
+    bool constants_synced = false;
+
+    void ensure_capacity(int in_nx, int in_ny) {
+        const size_t wanted_cells = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny);
+        const size_t wanted_fx = static_cast<size_t>(in_nx - 1) * static_cast<size_t>(in_ny);
+        const size_t wanted_fy = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny - 1);
+        if (in_nx == nx && in_ny == ny && wanted_cells == cell_count &&
+            wanted_fx == flux_x_count && wanted_fy == flux_y_count) {
+            return;
+        }
+
+        nx = in_nx;
+        ny = in_ny;
+        cell_count = wanted_cells;
+        flux_x_count = wanted_fx;
+        flux_y_count = wanted_fy;
+        constants_synced = false;
+        porosity_ptr = nullptr;
+        permeability_ptr = nullptr;
+
+        realloc_device(d.sw, cell_count * sizeof(double), "cudaMalloc(d_sw)");
+        realloc_device(d.pressure, cell_count * sizeof(double), "cudaMalloc(d_pressure)");
+        realloc_device(d.porosity, cell_count * sizeof(double), "cudaMalloc(d_porosity)");
+        realloc_device(d.permeability, cell_count * sizeof(double), "cudaMalloc(d_permeability)");
+        realloc_device(d.q_water, cell_count * sizeof(double), "cudaMalloc(d_q_water)");
+        realloc_device(d.next_sw, cell_count * sizeof(double), "cudaMalloc(d_next_sw)");
+        realloc_device(d.clip_flags, cell_count * sizeof(int), "cudaMalloc(d_clip_flags)");
+        realloc_device(d.flux_x, flux_x_count * sizeof(double), "cudaMalloc(d_flux_x)");
+        realloc_device(d.flux_y, flux_y_count * sizeof(double), "cudaMalloc(d_flux_y)");
+    }
+};
+
+TransportGpuWorkspace& transport_workspace() {
+    static TransportGpuWorkspace ws;
+    return ws;
+}
 
 __device__ int cell_index_device(int x, int y, int nx) {
     return y * nx + x;
@@ -117,6 +219,93 @@ __device__ double fractional_flow_water_device(const DeviceTransportParams& p, d
     const double lambda_w = krw / p.mu_w_cp;
     const double lambda_o = kro / p.mu_o_cp;
     return lambda_w / (lambda_w + lambda_o);
+}
+
+__device__ double harmonic_average_device(double a, double b) {
+    if (a <= 0.0 || b <= 0.0) {
+        return 0.0;
+    }
+    return 2.0 * a * b / (a + b);
+}
+
+__device__ double total_mobility_device(const DeviceTransportParams& p, double sw) {
+    const double se = effective_saturation_device(p, sw);
+    const double krw = pow(se, p.nw);
+    const double kro = pow(1.0 - se, p.no);
+    const double lambda_w = krw / p.mu_w_cp;
+    const double lambda_o = kro / p.mu_o_cp;
+    return lambda_w + lambda_o;
+}
+
+__global__ void compute_flux_x_kernel(
+    DeviceTransportParams p,
+    const double* pressure,
+    const double* sw,
+    const double* permeability,
+    double* flux_x) {
+    const int fx_nx = p.nx - 1;
+    const int count = fx_nx * p.ny;
+    const int face_idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+    if (face_idx >= count) {
+        return;
+    }
+
+    const int x = face_idx % fx_nx;
+    const int y = face_idx / fx_nx;
+    const int i = cell_index_device(x, y, p.nx);
+    const int j = cell_index_device(x + 1, y, p.nx);
+    const double lambda_i = total_mobility_device(p, sw[i]);
+    const double lambda_j = total_mobility_device(p, sw[j]);
+    const double perm_face = harmonic_average_device(permeability[i], permeability[j]);
+    const double lambda_face = harmonic_average_device(lambda_i, lambda_j);
+    const double transmissibility = perm_face * lambda_face;
+    flux_x[face_idx] = -transmissibility * (pressure[j] - pressure[i]);
+}
+
+__global__ void compute_flux_y_kernel(
+    DeviceTransportParams p,
+    const double* pressure,
+    const double* sw,
+    const double* permeability,
+    double* flux_y) {
+    const int fy_ny = p.ny - 1;
+    const int count = p.nx * fy_ny;
+    const int face_idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+    if (face_idx >= count) {
+        return;
+    }
+
+    const int x = face_idx % p.nx;
+    const int y = face_idx / p.nx;
+    const int i = cell_index_device(x, y, p.nx);
+    const int j = cell_index_device(x, y + 1, p.nx);
+    const double lambda_i = total_mobility_device(p, sw[i]);
+    const double lambda_j = total_mobility_device(p, sw[j]);
+    const double perm_face = harmonic_average_device(permeability[i], permeability[j]);
+    const double lambda_face = harmonic_average_device(lambda_i, lambda_j);
+    const double transmissibility = perm_face * lambda_face;
+    flux_y[face_idx] = -transmissibility * (pressure[j] - pressure[i]);
+}
+
+__global__ void build_well_sources_kernel(
+    DeviceTransportParams p,
+    const double* pressure,
+    const double* sw,
+    double* q_water) {
+    if (threadIdx.x != 0 || blockIdx.x != 0 || p.wells_enabled == 0) {
+        return;
+    }
+
+    constexpr double kWellRateScale = 1.0e-3;
+    const int injector_idx = cell_index_device(p.injector_cell_x, p.injector_cell_y, p.nx);
+    const int producer_idx = cell_index_device(p.producer_cell_x, p.producer_cell_y, p.nx);
+    const double q_inj = kWellRateScale * p.injector_rate_stb_day;
+    q_water[injector_idx] += q_inj;
+
+    const double drawdown = fmax(pressure[producer_idx] - p.producer_bhp_psi, 0.0);
+    const double q_prod_abs = kWellRateScale * p.producer_pi * drawdown;
+    const double q_prod_total = -q_prod_abs;
+    q_water[producer_idx] += fractional_flow_water_device(p, sw[producer_idx]) * q_prod_total;
 }
 
 __global__ void update_saturation_kernel(
@@ -181,11 +370,13 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
         fail("transport dt_days must be finite and positive.");
     }
 
-    const std::vector<double> flux_x = compute_total_flux_x(cfg, state);
-    const std::vector<double> flux_y = compute_total_flux_y(cfg, state);
+    int device_count = 0;
+    check_cuda(cudaGetDeviceCount(&device_count), "cudaGetDeviceCount");
+    if (device_count <= 0) {
+        fail_io("backend=gpu requested but no CUDA device is available.");
+    }
+
     const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny);
-    std::vector<double> q_water(count, 0.0);
-    accumulate_well_source_terms_host(cfg, state, q_water);
 
     const double mass_before = total_water_mass(state);
     std::vector<double> next_sw(count, 0.0);
@@ -203,80 +394,84 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
     params.mu_o_cp = cfg.fluid.mu_o_cp;
     params.sw_min = cfg.fluid.swc;
     params.sw_max = 1.0 - cfg.fluid.sor;
+    params.wells_enabled = cfg.wells.enabled ? 1 : 0;
+    params.injector_cell_x = cfg.wells.injector_cell_x;
+    params.injector_cell_y = cfg.wells.injector_cell_y;
+    params.producer_cell_x = cfg.wells.producer_cell_x;
+    params.producer_cell_y = cfg.wells.producer_cell_y;
+    params.injector_rate_stb_day = cfg.wells.injector_rate_stb_day;
+    params.producer_bhp_psi = cfg.wells.producer_bhp_psi;
+    params.producer_pi = cfg.wells.producer_pi;
 
-    double* d_sw = nullptr;
-    double* d_porosity = nullptr;
-    double* d_flux_x = nullptr;
-    double* d_flux_y = nullptr;
-    double* d_q_water = nullptr;
-    double* d_next_sw = nullptr;
-    int* d_clip_flags = nullptr;
+    TransportGpuWorkspace& ws = transport_workspace();
+    ws.ensure_capacity(cfg.nx, cfg.ny);
 
-    check_cuda(cudaMalloc(&d_sw, count * sizeof(double)), "cudaMalloc(d_sw)");
-    check_cuda(cudaMalloc(&d_porosity, count * sizeof(double)), "cudaMalloc(d_porosity)");
-    check_cuda(cudaMalloc(&d_q_water, count * sizeof(double)), "cudaMalloc(d_q_water)");
-    check_cuda(cudaMalloc(&d_next_sw, count * sizeof(double)), "cudaMalloc(d_next_sw)");
-    check_cuda(cudaMalloc(&d_clip_flags, count * sizeof(int)), "cudaMalloc(d_clip_flags)");
-    check_cuda(
-        cudaMalloc(&d_flux_x, flux_x.size() * sizeof(double)),
-        "cudaMalloc(d_flux_x)");
-    check_cuda(
-        cudaMalloc(&d_flux_y, flux_y.size() * sizeof(double)),
-        "cudaMalloc(d_flux_y)");
+    if (!ws.constants_synced || ws.porosity_ptr != state.porosity.data() || ws.permeability_ptr != state.permeability_md.data()) {
+        check_cuda(
+            cudaMemcpy(ws.d.porosity, state.porosity.data(), count * sizeof(double), cudaMemcpyHostToDevice),
+            "cudaMemcpy(porosity)");
+        check_cuda(
+            cudaMemcpy(ws.d.permeability, state.permeability_md.data(), count * sizeof(double), cudaMemcpyHostToDevice),
+            "cudaMemcpy(permeability)");
+        ws.constants_synced = true;
+        ws.porosity_ptr = state.porosity.data();
+        ws.permeability_ptr = state.permeability_md.data();
+    }
 
     check_cuda(
-        cudaMemcpy(d_sw, state.sw.data(), count * sizeof(double), cudaMemcpyHostToDevice),
+        cudaMemcpy(ws.d.sw, state.sw.data(), count * sizeof(double), cudaMemcpyHostToDevice),
         "cudaMemcpy(sw)");
     check_cuda(
-        cudaMemcpy(d_porosity, state.porosity.data(), count * sizeof(double), cudaMemcpyHostToDevice),
-        "cudaMemcpy(porosity)");
-    check_cuda(
-        cudaMemcpy(d_q_water, q_water.data(), count * sizeof(double), cudaMemcpyHostToDevice),
-        "cudaMemcpy(q_water)");
-    if (!flux_x.empty()) {
-        check_cuda(
-            cudaMemcpy(d_flux_x, flux_x.data(), flux_x.size() * sizeof(double), cudaMemcpyHostToDevice),
-            "cudaMemcpy(flux_x)");
-    }
-    if (!flux_y.empty()) {
-        check_cuda(
-            cudaMemcpy(d_flux_y, flux_y.data(), flux_y.size() * sizeof(double), cudaMemcpyHostToDevice),
-            "cudaMemcpy(flux_y)");
-    }
+        cudaMemcpy(ws.d.pressure, state.pressure.data(), count * sizeof(double), cudaMemcpyHostToDevice),
+        "cudaMemcpy(pressure)");
+    check_cuda(cudaMemset(ws.d.q_water, 0, count * sizeof(double)), "cudaMemset(q_water)");
+    check_cuda(cudaMemset(ws.d.clip_flags, 0, count * sizeof(int)), "cudaMemset(clip_flags)");
 
     const int threads_per_block = 256;
+    if (ws.flux_x_count > 0) {
+        const int flux_x_blocks = static_cast<int>((ws.flux_x_count + static_cast<size_t>(threads_per_block) - 1U) / static_cast<size_t>(threads_per_block));
+        compute_flux_x_kernel<<<flux_x_blocks, threads_per_block>>>(params, ws.d.pressure, ws.d.sw, ws.d.permeability, ws.d.flux_x);
+        check_cuda(cudaGetLastError(), "compute_flux_x_kernel launch");
+    }
+    if (ws.flux_y_count > 0) {
+        const int flux_y_blocks = static_cast<int>((ws.flux_y_count + static_cast<size_t>(threads_per_block) - 1U) / static_cast<size_t>(threads_per_block));
+        compute_flux_y_kernel<<<flux_y_blocks, threads_per_block>>>(params, ws.d.pressure, ws.d.sw, ws.d.permeability, ws.d.flux_y);
+        check_cuda(cudaGetLastError(), "compute_flux_y_kernel launch");
+    }
+    build_well_sources_kernel<<<1, 1>>>(params, ws.d.pressure, ws.d.sw, ws.d.q_water);
+    check_cuda(cudaGetLastError(), "build_well_sources_kernel launch");
+
     const int blocks = static_cast<int>((count + static_cast<size_t>(threads_per_block) - 1U) / static_cast<size_t>(threads_per_block));
-    update_saturation_kernel<<<blocks, threads_per_block>>>(params, d_sw, d_porosity, d_flux_x, d_flux_y, d_q_water, d_next_sw, d_clip_flags);
+    update_saturation_kernel<<<blocks, threads_per_block>>>(params, ws.d.sw, ws.d.porosity, ws.d.flux_x, ws.d.flux_y, ws.d.q_water, ws.d.next_sw, ws.d.clip_flags);
     check_cuda(cudaGetLastError(), "update_saturation_kernel launch");
     check_cuda(cudaDeviceSynchronize(), "cudaDeviceSynchronize(update_saturation_kernel)");
 
     check_cuda(
-        cudaMemcpy(next_sw.data(), d_next_sw, count * sizeof(double), cudaMemcpyDeviceToHost),
+        cudaMemcpy(next_sw.data(), ws.d.next_sw, count * sizeof(double), cudaMemcpyDeviceToHost),
         "cudaMemcpy(next_sw)");
     check_cuda(
-        cudaMemcpy(clip_flags.data(), d_clip_flags, count * sizeof(int), cudaMemcpyDeviceToHost),
+        cudaMemcpy(clip_flags.data(), ws.d.clip_flags, count * sizeof(int), cudaMemcpyDeviceToHost),
         "cudaMemcpy(clip_flags)");
-
-    check_cuda(cudaFree(d_sw), "cudaFree(d_sw)");
-    check_cuda(cudaFree(d_porosity), "cudaFree(d_porosity)");
-    check_cuda(cudaFree(d_flux_x), "cudaFree(d_flux_x)");
-    check_cuda(cudaFree(d_flux_y), "cudaFree(d_flux_y)");
-    check_cuda(cudaFree(d_q_water), "cudaFree(d_q_water)");
-    check_cuda(cudaFree(d_next_sw), "cudaFree(d_next_sw)");
-    check_cuda(cudaFree(d_clip_flags), "cudaFree(d_clip_flags)");
 
     int clip_count = 0;
     for (int clipped : clip_flags) {
         clip_count += clipped;
     }
 
+    double expected_source_delta = 0.0;
+    if (cfg.wells.enabled) {
+        constexpr double kWellRateScale = 1.0e-3;
+        const size_t producer_idx = cell_index(cfg.wells.producer_cell_x, cfg.wells.producer_cell_y, cfg.nx);
+        const double q_inj = kWellRateScale * cfg.wells.injector_rate_stb_day;
+        const double drawdown = std::max(state.pressure[producer_idx] - cfg.wells.producer_bhp_psi, 0.0);
+        const double q_prod_abs = kWellRateScale * cfg.wells.producer_pi * drawdown;
+        const double q_prod_total = -q_prod_abs;
+        const double q_prod_w = fractional_flow_water_host(cfg, state.sw[producer_idx]) * q_prod_total;
+        expected_source_delta = dt_days * (q_inj + q_prod_w);
+    }
     state.sw = std::move(next_sw);
     validate_state_invariants(state);
     const double mass_after = total_water_mass(state);
-    double expected_source_delta = 0.0;
-    for (double qwi : q_water) {
-        expected_source_delta += dt_days * qwi;
-    }
     const double mass_delta_abs = std::abs((mass_after - mass_before) - expected_source_delta);
     const double mass_denom = std::max(std::abs(mass_before), 1.0e-20);
     const double mass_balance_rel = mass_delta_abs / mass_denom;

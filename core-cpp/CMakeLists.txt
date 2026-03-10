@@ -20,7 +20,7 @@ add_library(sim_config
     src/transport.cpp
 )
 if(RESERV_ENABLE_CUDA)
-    target_sources(sim_config PRIVATE src/transport_cuda.cu)
+    target_sources(sim_config PRIVATE src/transport_cuda.cu src/pressure_cuda.cu)
     target_compile_definitions(sim_config PUBLIC SIM_ENABLE_CUDA=1)
 else()
     target_compile_definitions(sim_config PUBLIC SIM_ENABLE_CUDA=0)

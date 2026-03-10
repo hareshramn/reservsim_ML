@@ -524,7 +524,9 @@ RunDiagnostics run_step_with_retry_policy(const SimulationConfig& cfg, Reservoir
         const auto pressure_start = std::chrono::steady_clock::now();
         PressureSystem system = assemble_pressure_system(cfg, state);
         apply_pressure_gauge(system, 0, state.pressure.front());
-        const PressureSolveResult solve = solve_pressure_cg_jacobi(system, state.pressure, kPressureResidualTol, kPressureMaxIterations);
+        const PressureSolveResult solve = (backend == "gpu")
+                                              ? solve_pressure_cg_jacobi_gpu(system, state.pressure, kPressureResidualTol, kPressureMaxIterations)
+                                              : solve_pressure_cg_jacobi(system, state.pressure, kPressureResidualTol, kPressureMaxIterations);
         state.pressure = solve.pressure;
         const auto pressure_end = std::chrono::steady_clock::now();
 
@@ -660,6 +662,12 @@ int main(int argc, char** argv) {
                 ExitCode::E_ARG_INVALID,
                 "E_ARG_INVALID",
                 "backend=gpu requested but CUDA transport is not enabled in this build.");
+        }
+        if (args.backend == "gpu" && !gpu_pressure_enabled()) {
+            emit_and_exit(
+                ExitCode::E_ARG_INVALID,
+                "E_ARG_INVALID",
+                "backend=gpu requested but CUDA pressure backend is not enabled/available.");
         }
         const SimulationConfig cfg = load_simulation_config(args.case_path);
         const OutputContext ctx = prepare_output_context(args, cfg.schedule_end_step);
