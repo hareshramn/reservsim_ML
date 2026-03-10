@@ -44,11 +44,11 @@ def parse_output_dir(stdout: str) -> Path:
 
 
 def run_case(root: Path, model: str, backend: str, repeat_idx: int, steps: int, output_every: int, gpu_init_retries: int) -> Path:
+    model_dir = root / "cases" / model
     cmd = [
-        str(root / "workflow"),
-        "run",
-        "--model",
-        model,
+        str(root / "tools" / "model_run.sh"),
+        "--model-dir",
+        str(model_dir),
         "--mode",
         "release",
         "--backend",
@@ -57,14 +57,14 @@ def run_case(root: Path, model: str, backend: str, repeat_idx: int, steps: int, 
         str(steps),
         "--output-every",
         str(output_every),
-        "--purpose",
-        "benchmark",
         "--tag",
         f"benchmark-matrix-r{repeat_idx}",
     ]
     if backend == "gpu":
         cmd += ["--gpu-init-retries", str(gpu_init_retries)]
-    proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
+    env = dict(os.environ)
+    env["RESERV_OUTPUT_BUCKET"] = "benchmark"
+    proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout)
         sys.stderr.write(proc.stderr)

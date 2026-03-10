@@ -15,16 +15,29 @@ Commands:
   doctor
       Check local toolchain and Python deps needed by this repo.
 
+  ui
+      Launch a local GUI for selecting workflow mode and command arguments.
+
+  web-ui [--host 127.0.0.1] [--port 8765]
+      Launch a browser-based local UI for selecting mode and arguments.
+
   gpu-check --model <modelN> [gpu-check options]
       Probe CUDA readiness with a tiny GPU run.
 
   run --model <modelN> [run options]
       Run one model from repo root.
-      Run options: --mode --backend --steps --output-every --out --gpu-init-retries --purpose --tag --case-file
+      Run options: --mode --backend --steps --output-every --out --gpu-init-retries --tag --case-file
 
   ml-data-gen --model <modelN> [ml-data-gen options]
       Generate ML-data runs from temporary case YAML variants.
       ml-data-gen options: --plan --mode --backend --steps --output-every --gpu-init-retries --keep-temp
+
+  ml-check --model <modelN> [ml-check options]
+      Run ml-data-gen, validate latest ml-data run, parity, and bench in sequence.
+      ml-check options:
+        --plan --mode --backend --steps --output-every --gpu-init-retries
+        --bench-repeats --bench-steps --bench-output-every
+        --skip-parity --skip-bench
 
   plot --model <modelN> [--run <run_id_or_path>] [--out <dir>] [--check-only]
       Plot a run; if --run is omitted, latest run under cases/<model>/outputs is used.
@@ -49,7 +62,6 @@ Commands:
         --steps <N>                   (default: 10)
         --output-every <N>            (default: 1)
         --gpu-init-retries <N>        (default: 0)
-        --purpose <adhoc|benchmark|ml-data> (default: adhoc)
         --tag <name>                  (optional run label)
         --out <path|auto>             (default: auto)
         --plot-out <dir>              (default: figs)
@@ -61,9 +73,12 @@ Commands:
 Examples:
   ./workflow compile --mode debug --cuda off
   ./workflow doctor
+  ./workflow ui
+  ./workflow web-ui
   ./workflow gpu-check --model model1 --mode release
   ./workflow run --model model1 --steps 10 --mode release
   ./workflow ml-data-gen --model model1 --plan cases/model1/ml_scenarios.csv --steps 200
+  ./workflow ml-check --model model1
   ./workflow validate --run cases/model1/outputs/ml-data/<run_id>
   ./workflow parity --model model1
   ./workflow bench --model model1 --repeats 3 --steps 50
@@ -134,6 +149,20 @@ case "$cmd" in
     exec "$ROOT_DIR/tools/doctor.sh" "$@"
     ;;
 
+  ui)
+    if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+      exec "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/tools/workflow_gui.py" "$@"
+    fi
+    exec python3 "$ROOT_DIR/tools/workflow_gui.py" "$@"
+    ;;
+
+  web-ui)
+    if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+      exec "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/tools/workflow_web_ui.py" "$@"
+    fi
+    exec python3 "$ROOT_DIR/tools/workflow_web_ui.py" "$@"
+    ;;
+
   gpu-check)
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
       exec "$ROOT_DIR/tools/gpu_check.sh" --help
@@ -168,6 +197,10 @@ case "$cmd" in
         --model)
           model="${2:-}"
           shift 2
+          ;;
+        --purpose)
+          echo "workflow run is adhoc-only; use 'workflow bench' for benchmark runs or 'workflow ml-data-gen' for ML data runs." >&2
+          exit 2
           ;;
         *)
           run_args+=("$1")
@@ -207,6 +240,78 @@ case "$cmd" in
     fi
     model_dir="$(resolve_model_dir "$model")"
     exec "$ROOT_DIR/tools/ml_data_generate.sh" --model-dir "$model_dir" "${args[@]}"
+    ;;
+
+  ml-check)
+    model=""
+    plan=""
+    mode="release"
+    backend="cpu"
+    steps="200"
+    output_every="1"
+    gpu_init_retries="2"
+    bench_repeats="3"
+    bench_steps="50"
+    bench_output_every="10"
+    skip_parity=0
+    skip_bench=0
+
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model) model="${2:-}"; shift 2 ;;
+        --plan) plan="${2:-}"; shift 2 ;;
+        --mode) mode="${2:-}"; shift 2 ;;
+        --backend) backend="${2:-}"; shift 2 ;;
+        --steps) steps="${2:-}"; shift 2 ;;
+        --output-every) output_every="${2:-}"; shift 2 ;;
+        --gpu-init-retries) gpu_init_retries="${2:-}"; shift 2 ;;
+        --bench-repeats) bench_repeats="${2:-}"; shift 2 ;;
+        --bench-steps) bench_steps="${2:-}"; shift 2 ;;
+        --bench-output-every) bench_output_every="${2:-}"; shift 2 ;;
+        --skip-parity) skip_parity=1; shift ;;
+        --skip-bench) skip_bench=1; shift ;;
+        *)
+          echo "Unknown argument for ml-check: $1" >&2
+          exit 2
+          ;;
+      esac
+    done
+
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+
+    ml_data_cmd=("$ROOT_DIR/tools/ml_data_generate.sh"
+      --model-dir "$model_dir"
+      --mode "$mode"
+      --backend "$backend"
+      --steps "$steps"
+      --output-every "$output_every"
+      --gpu-init-retries "$gpu_init_retries")
+    if [[ -n "$plan" ]]; then
+      ml_data_cmd+=(--plan "$plan")
+    fi
+    "${ml_data_cmd[@]}"
+
+    latest_ml="$(latest_run_dir_for_model "$model" "ml-data")"
+    if [[ -z "$latest_ml" ]]; then
+      echo "No ml-data runs found after ml-data-gen for model: $model" >&2
+      exit 2
+    fi
+    "$ROOT_DIR/tools/validate_run.py" --run "$latest_ml"
+    if [[ "$skip_parity" -eq 0 ]]; then
+      "$ROOT_DIR/tools/parity_report.py" --model "$model"
+    fi
+    if [[ "$skip_bench" -eq 0 ]]; then
+      "$ROOT_DIR/tools/benchmark_matrix.py" \
+        --model "$model" \
+        --repeats "$bench_repeats" \
+        --steps "$bench_steps" \
+        --output-every "$bench_output_every" \
+        --gpu-init-retries "$gpu_init_retries"
+    fi
     ;;
 
   validate)
@@ -302,7 +407,6 @@ case "$cmd" in
     steps="10"
     output_every="1"
     gpu_init_retries="0"
-    purpose="adhoc"
     tag=""
     out="auto"
     plot_out="figs"
@@ -319,7 +423,6 @@ case "$cmd" in
         --steps) steps="${2:-}"; shift 2 ;;
         --output-every) output_every="${2:-}"; shift 2 ;;
         --gpu-init-retries) gpu_init_retries="${2:-}"; shift 2 ;;
-        --purpose) purpose="${2:-}"; shift 2 ;;
         --tag) tag="${2:-}"; shift 2 ;;
         --out) out="${2:-}"; shift 2 ;;
         --plot-out) plot_out="${2:-}"; shift 2 ;;
@@ -371,14 +474,13 @@ case "$cmd" in
       --steps "$steps" \
       --output-every "$output_every" \
       --gpu-init-retries "$gpu_init_retries" \
-      --purpose "$purpose" \
       --tag "$tag" \
       --out "$out"
 
     run_arg=""
     resolved_out="$(resolve_out_dir "$model_dir" "$out")"
     if [[ "$resolved_out" == "auto" ]]; then
-      run_arg="$(latest_run_dir_for_model "$model" "$purpose")"
+      run_arg="$(latest_run_dir_for_model "$model" "adhoc")"
       if [[ -z "$run_arg" ]]; then
         echo "Run completed, but no output directory was found for plotting." >&2
         exit 2

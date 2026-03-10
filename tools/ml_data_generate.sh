@@ -279,14 +279,13 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   echo "[run] model=$model_name tag=$tag case=$tmp_yaml"
   set +e
-  run_output="$("$ROOT_DIR/workflow" run \
-    --model "$model_name" \
+  run_output="$(RESERV_OUTPUT_BUCKET="ml-data" "$ROOT_DIR/tools/model_run.sh" \
+    --model-dir "$MODEL_DIR" \
     --mode "$MODE" \
     --backend "$BACKEND" \
     --steps "$STEPS" \
     --output-every "$OUTPUT_EVERY" \
     --gpu-init-retries "$GPU_INIT_RETRIES" \
-    --purpose "ml-data" \
     --tag "$tag" \
     --case-file "$tmp_yaml" 2>&1)"
   rc=$?

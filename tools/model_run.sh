@@ -10,15 +10,15 @@ BACKEND="cpu"
 STEPS="10"
 OUTPUT_EVERY="1"
 GPU_INIT_RETRIES="0"
-PURPOSE="adhoc"
 TAG=""
 OUT_DIR="auto"
 CASE_FILE=""
+OUTPUT_BUCKET="adhoc"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--gpu-init-retries N] [--purpose adhoc|benchmark|ml-data] [--tag name] [--out path] [--case-file path]
+  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--gpu-init-retries N] [--tag name] [--out path] [--case-file path]
 
 Defaults come from run.env in the selected model folder.
 CLI arguments override run.env values.
@@ -71,10 +71,11 @@ if [[ -f "$MODEL_DIR/run.env" ]]; then
   STEPS="${SIM_STEPS:-$STEPS}"
   OUTPUT_EVERY="${SIM_OUTPUT_EVERY:-$OUTPUT_EVERY}"
   GPU_INIT_RETRIES="${SIM_GPU_INIT_RETRIES:-$GPU_INIT_RETRIES}"
-  PURPOSE="${SIM_RUN_PURPOSE:-$PURPOSE}"
   TAG="${SIM_RUN_TAG:-$TAG}"
   OUT_DIR="${SIM_OUT_DIR:-$OUT_DIR}"
 fi
+
+OUTPUT_BUCKET="${RESERV_OUTPUT_BUCKET:-$OUTPUT_BUCKET}"
 
 # Pass 2: apply all CLI options (override run.env/defaults).
 while [[ $# -gt 0 ]]; do
@@ -85,7 +86,6 @@ while [[ $# -gt 0 ]]; do
     --steps) STEPS="${2:-}"; shift 2 ;;
     --output-every) OUTPUT_EVERY="${2:-}"; shift 2 ;;
     --gpu-init-retries) GPU_INIT_RETRIES="${2:-}"; shift 2 ;;
-    --purpose) PURPOSE="${2:-}"; shift 2 ;;
     --tag) TAG="${2:-}"; shift 2 ;;
     --out) OUT_DIR="${2:-}"; shift 2 ;;
     --case-file|--case) CASE_FILE="${2:-}"; shift 2 ;;
@@ -139,8 +139,8 @@ if ! [[ "$GPU_INIT_RETRIES" =~ ^[0-9]+$ ]]; then
   echo "Invalid --gpu-init-retries: $GPU_INIT_RETRIES (non-negative integer required)" >&2
   exit 2
 fi
-if [[ "$PURPOSE" != "adhoc" && "$PURPOSE" != "benchmark" && "$PURPOSE" != "ml-data" ]]; then
-  echo "Invalid --purpose: $PURPOSE (adhoc|benchmark|ml-data)" >&2
+if [[ "$OUTPUT_BUCKET" != "adhoc" && "$OUTPUT_BUCKET" != "benchmark" && "$OUTPUT_BUCKET" != "ml-data" ]]; then
+  echo "Invalid output bucket: $OUTPUT_BUCKET (adhoc|benchmark|ml-data)" >&2
   exit 2
 fi
 
@@ -170,7 +170,7 @@ if [[ "$OUT_DIR" == "auto" ]]; then
     run_tag="__$(sanitize_component "$TAG")"
   fi
   RUN_ID="$(date +%Y%m%d_%H%M%S_%3N)__${model_name}__${BACKEND}__n${STEPS}__oe${OUTPUT_EVERY}${run_tag}"
-  OUT_DIR="$MODEL_DIR/outputs/$PURPOSE/$RUN_ID"
+  OUT_DIR="$MODEL_DIR/outputs/$OUTPUT_BUCKET/$RUN_ID"
 else
   case "$OUT_DIR" in
     /*) ;;
@@ -180,7 +180,7 @@ fi
 
 echo "Running sim_run"
 echo "  mode=$MODE backend=$BACKEND steps=$STEPS output_every=$OUTPUT_EVERY"
-echo "  purpose=$PURPOSE tag=${TAG:-none}"
+echo "  purpose=$OUTPUT_BUCKET tag=${TAG:-none}"
 echo "  case=$CASE_FILE"
 echo "  out=$OUT_DIR"
 
