@@ -23,7 +23,7 @@ def resolve_run(root: Path, model: str, seed: int, backend: str, run_hint: str |
             p = (root / p).resolve()
         if p.is_dir():
             return p
-        candidates = list((root / "cases").glob(f"*/outputs/{run_hint}"))
+        candidates = list((root / "cases").glob(f"*/outputs/**/{run_hint}"))
         if len(candidates) == 1:
             return candidates[0]
         raise FileNotFoundError(f"Could not resolve run: {run_hint}")
@@ -31,7 +31,9 @@ def resolve_run(root: Path, model: str, seed: int, backend: str, run_hint: str |
     outputs = root / "cases" / model / "outputs"
     if not outputs.is_dir():
         raise FileNotFoundError(f"Model outputs not found: {outputs}")
-    matches = sorted(outputs.glob(f"*_{{backend}}_{seed}".format(backend=backend)))
+    matches = sorted(outputs.glob(f"**/*__{backend}__s{seed}__*"))
+    if not matches:
+        matches = sorted(outputs.glob(f"*_{backend}_{seed}"))
     if not matches:
         raise FileNotFoundError(f"No {backend} runs found for seed={seed} under {outputs}")
     return matches[-1]

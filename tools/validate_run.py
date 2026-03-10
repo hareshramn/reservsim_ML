@@ -45,7 +45,7 @@ def resolve_run(root: Path, run: str) -> Path:
         p = (root / p).resolve()
     if p.is_dir():
         return p
-    candidates = list((root / "cases").glob(f"*/outputs/{run}"))
+    candidates = list((root / "cases").glob(f"*/outputs/**/{run}"))
     if len(candidates) == 1:
         return candidates[0]
     raise FileNotFoundError(f"Could not resolve run path: {run}")

@@ -60,7 +60,7 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 
 ## Final Expected Outputs
 
-- `benchmark_summary.csv` with CPU/GPU/surrogate performance and error metrics.
+- `benchmarks/benchmark_summary.csv` with CPU/GPU/surrogate performance and error metrics.
 - Pressure/saturation plots and time-series charts.
 - MP4 animations of field evolution.
 - Technical report with physics, numerics, optimization, and ML findings.
@@ -82,7 +82,7 @@ Model convention:
 - required file name: `model.yaml`,
 - defaults live in `run.env`,
 - run with local `./run`,
-- outputs are written to `<model_dir>/outputs/<run_id>/`.
+- outputs are written to `<model_dir>/outputs/<purpose>/<run_id>/`.
 
 Examples:
 - `cases/model1/model.yaml`

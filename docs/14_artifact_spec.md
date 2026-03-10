@@ -9,9 +9,17 @@
 5. MP4 animations.
 6. Technical report (`report.pdf`).
 
+## Output Layout
+
+- Auto-managed simulation runs live under `cases/<model>/outputs/<purpose>/<run_id>/`.
+- Purpose buckets:
+  - `adhoc`
+  - `benchmark`
+  - `ml-data`
+
 ## CSV Schemas
 
-### `benchmark_summary.csv`
+### `benchmarks/benchmark_summary.csv`
 
 Columns:
 - `run_id`
@@ -87,7 +95,7 @@ Columns:
 
 - `README.md`
 - `docs/` complete
-- `benchmark_summary.csv`
+- `benchmarks/benchmark_summary.csv`
 - `surrogate_eval.csv`
 - required PNG figures
 - at least two MP4 files

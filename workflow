@@ -20,7 +20,7 @@ Commands:
 
   run --model <modelN> [run options]
       Run one model from repo root.
-      Run options: --mode --backend --steps --output-every --seed --out --gpu-init-retries
+      Run options: --mode --backend --steps --output-every --seed --out --gpu-init-retries --purpose --tag
 
   plot --model <modelN> [--run <run_id_or_path>] [--out <dir>] [--check-only]
       Plot a run; if --run is omitted, latest run under cases/<model>/outputs is used.
@@ -32,7 +32,7 @@ Commands:
       Compare latest CPU/GPU artifacts and report parity metrics.
 
   bench --model <modelN> [bench options]
-      Execute CPU/GPU matrix and write benchmark_summary.csv.
+      Execute CPU/GPU matrix and write benchmarks/benchmark_summary.csv.
 
   clean [--model <modelN> | --all] [--keep <N>] [--apply]
       Clean output directories.
@@ -46,6 +46,8 @@ Commands:
         --output-every <N>            (default: 1)
         --seed <N>                    (default: 7)
         --gpu-init-retries <N>        (default: 0)
+        --purpose <adhoc|benchmark|ml-data> (default: adhoc)
+        --tag <name>                  (optional run label)
         --out <path|auto>             (default: auto)
         --plot-out <dir>              (default: figs)
         --cuda <auto|on|off>          (default: backend-derived)
@@ -58,7 +60,7 @@ Examples:
   ./workflow doctor
   ./workflow gpu-check --model model1 --mode release --seed 7
   ./workflow run --model model1 --steps 10 --mode release
-  ./workflow validate --run cases/model1/outputs/<run_id>
+  ./workflow validate --run cases/model1/outputs/ml-data/<run_id>
   ./workflow parity --model model1 --seed 7
   ./workflow bench --model model1 --seeds 1,2,3 --steps 50
   ./workflow plot --model model1
@@ -69,12 +71,22 @@ USAGE
 
 latest_run_dir_for_model() {
   local model_name="$1"
+  local purpose="${2:-}"
   local outputs_dir="$ROOT_DIR/cases/$model_name/outputs"
   if [[ ! -d "$outputs_dir" ]]; then
     echo ""
     return 0
   fi
-  find "$outputs_dir" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}'
+  if [[ -n "$purpose" ]]; then
+    local purpose_dir="$outputs_dir/$purpose"
+    if [[ ! -d "$purpose_dir" ]]; then
+      echo ""
+      return 0
+    fi
+    find "$purpose_dir" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}'
+    return 0
+  fi
+  find "$outputs_dir" -mindepth 1 -maxdepth 2 -type f -name meta.json -printf '%T@ %h\n' | sort -nr | awk 'NR==1{print $2}'
 }
 
 resolve_model_dir() {
@@ -261,6 +273,8 @@ case "$cmd" in
     output_every="1"
     seed="7"
     gpu_init_retries="0"
+    purpose="adhoc"
+    tag=""
     out="auto"
     plot_out="figs"
     cuda=""
@@ -277,6 +291,8 @@ case "$cmd" in
         --output-every) output_every="${2:-}"; shift 2 ;;
         --seed) seed="${2:-}"; shift 2 ;;
         --gpu-init-retries) gpu_init_retries="${2:-}"; shift 2 ;;
+        --purpose) purpose="${2:-}"; shift 2 ;;
+        --tag) tag="${2:-}"; shift 2 ;;
         --out) out="${2:-}"; shift 2 ;;
         --plot-out) plot_out="${2:-}"; shift 2 ;;
         --cuda) cuda="${2:-}"; shift 2 ;;
@@ -328,12 +344,14 @@ case "$cmd" in
       --output-every "$output_every" \
       --seed "$seed" \
       --gpu-init-retries "$gpu_init_retries" \
+      --purpose "$purpose" \
+      --tag "$tag" \
       --out "$out"
 
     run_arg=""
     resolved_out="$(resolve_out_dir "$model_dir" "$out")"
     if [[ "$resolved_out" == "auto" ]]; then
-      run_arg="$(latest_run_dir_for_model "$model")"
+      run_arg="$(latest_run_dir_for_model "$model" "$purpose")"
       if [[ -z "$run_arg" ]]; then
         echo "Run completed, but no output directory was found for plotting." >&2
         exit 2

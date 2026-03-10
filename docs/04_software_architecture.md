@@ -5,14 +5,14 @@
 - `core-cpp/`: C++17 + CUDA simulation engine.
 - `python/`: surrogate training, evaluation, visualization, report helpers.
 - `cases/`: YAML case configurations.
-- `outputs/`: generated run artifacts.
+- `outputs/`: generated run artifacts, organized by purpose bucket (`adhoc`, `benchmark`, `ml-data`) when auto-managed by workflow tooling.
 - `docs/`: specs and governance.
 
 ## Data Flow
 
 1. Case YAML -> simulator config object.
-2. Simulator run -> checkpoint tensors + metrics.
-3. Checkpoints -> ML dataset.
+2. Simulator run -> checkpoint tensors + metrics under `outputs/<purpose>/<run_id>/`.
+3. `outputs/ml-data/<run_id>/` checkpoints -> ML dataset.
 4. Trained model -> rollout evaluation.
 5. Evaluation outputs -> benchmark tables and visuals.
 
@@ -43,13 +43,13 @@ Error output contract:
 ### Training
 
 ```bash
-python train_surrogate.py --data <dir> --config <yaml>
+python python/ml/train_surrogate.py --data <dir> --config <yaml>
 ```
 
 ### Evaluation
 
 ```bash
-python eval_surrogate.py --checkpoint <ckpt> --case <path> --out <dir>
+python python/ml/eval_surrogate.py --checkpoint <ckpt> --case <path> --out <dir>
 ```
 
 ## Output Schema Contract

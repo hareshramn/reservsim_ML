@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
-FIG_SCRIPT="$ROOT_DIR/make_figures.py"
+FIG_SCRIPT="$ROOT_DIR/python/viz/make_figures.py"
 
 RUN_ARG=""
 OUT_ARG="figs"
@@ -15,7 +15,7 @@ Usage:
   tools/plot_run.sh --run <run_id_or_run_dir> [--out <dir>] [--check-only]
 
 Description:
-  Wrapper for make_figures.py using the project virtualenv (.venv).
+  Wrapper for python/viz/make_figures.py using the project virtualenv (.venv).
   Relative --out paths are resolved under the run directory.
 
 Examples:

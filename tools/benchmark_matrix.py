@@ -59,6 +59,10 @@ def run_case(root: Path, model: str, backend: str, seed: int, steps: int, output
         str(output_every),
         "--seed",
         str(seed),
+        "--purpose",
+        "benchmark",
+        "--tag",
+        "benchmark-matrix",
     ]
     if backend == "gpu":
         cmd += ["--gpu-init-retries", str(gpu_init_retries)]
@@ -88,13 +92,13 @@ def read_meta(run_dir: Path) -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Run CPU/GPU benchmark matrix and emit benchmark_summary.csv")
+    ap = argparse.ArgumentParser(description="Run CPU/GPU benchmark matrix and emit benchmarks/benchmark_summary.csv")
     ap.add_argument("--model", required=True)
     ap.add_argument("--seeds", default="1,2,3")
     ap.add_argument("--steps", type=int, default=50)
     ap.add_argument("--output-every", type=int, default=10)
     ap.add_argument("--gpu-init-retries", type=int, default=2)
-    ap.add_argument("--out", default="benchmark_summary.csv")
+    ap.add_argument("--out", default="benchmarks/benchmark_summary.csv")
     args = ap.parse_args()
 
     seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]

@@ -11,16 +11,28 @@ STEPS="10"
 OUTPUT_EVERY="1"
 SEED="7"
 GPU_INIT_RETRIES="0"
+PURPOSE="adhoc"
+TAG=""
 OUT_DIR="auto"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--gpu-init-retries N] [--out path]
+  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--gpu-init-retries N] [--purpose adhoc|benchmark|ml-data] [--tag name] [--out path]
 
 Defaults come from run.env in the selected model folder.
 CLI arguments override run.env values.
 USAGE
+}
+
+sanitize_component() {
+  local raw="$1"
+  local sanitized
+  sanitized="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g')"
+  if [[ -z "$sanitized" ]]; then
+    sanitized="run"
+  fi
+  printf '%s\n' "$sanitized"
 }
 
 # Pass 1: only discover --model-dir so we can load the right run.env.
@@ -60,6 +72,8 @@ if [[ -f "$MODEL_DIR/run.env" ]]; then
   OUTPUT_EVERY="${SIM_OUTPUT_EVERY:-$OUTPUT_EVERY}"
   SEED="${SIM_SEED:-$SEED}"
   GPU_INIT_RETRIES="${SIM_GPU_INIT_RETRIES:-$GPU_INIT_RETRIES}"
+  PURPOSE="${SIM_RUN_PURPOSE:-$PURPOSE}"
+  TAG="${SIM_RUN_TAG:-$TAG}"
   OUT_DIR="${SIM_OUT_DIR:-$OUT_DIR}"
 fi
 
@@ -73,6 +87,8 @@ while [[ $# -gt 0 ]]; do
     --output-every) OUTPUT_EVERY="${2:-}"; shift 2 ;;
     --seed) SEED="${2:-}"; shift 2 ;;
     --gpu-init-retries) GPU_INIT_RETRIES="${2:-}"; shift 2 ;;
+    --purpose) PURPOSE="${2:-}"; shift 2 ;;
+    --tag) TAG="${2:-}"; shift 2 ;;
     --out) OUT_DIR="${2:-}"; shift 2 ;;
     -h|--help)
       usage
@@ -109,6 +125,10 @@ if ! [[ "$GPU_INIT_RETRIES" =~ ^[0-9]+$ ]]; then
   echo "Invalid --gpu-init-retries: $GPU_INIT_RETRIES (non-negative integer required)" >&2
   exit 2
 fi
+if [[ "$PURPOSE" != "adhoc" && "$PURPOSE" != "benchmark" && "$PURPOSE" != "ml-data" ]]; then
+  echo "Invalid --purpose: $PURPOSE (adhoc|benchmark|ml-data)" >&2
+  exit 2
+fi
 
 BIN_FLAVOR="cpu"
 if [[ "$BACKEND" == "gpu" ]]; then
@@ -130,8 +150,13 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 if [[ "$OUT_DIR" == "auto" ]]; then
-  RUN_ID="$(date +%Y%m%d_%H%M%S_%3N)_${BACKEND}_${SEED}"
-  OUT_DIR="$MODEL_DIR/outputs/$RUN_ID"
+  model_name="$(sanitize_component "$(basename "$MODEL_DIR")")"
+  run_tag=""
+  if [[ -n "$TAG" ]]; then
+    run_tag="__$(sanitize_component "$TAG")"
+  fi
+  RUN_ID="$(date +%Y%m%d_%H%M%S_%3N)__${model_name}__${BACKEND}__s${SEED}__n${STEPS}__oe${OUTPUT_EVERY}${run_tag}"
+  OUT_DIR="$MODEL_DIR/outputs/$PURPOSE/$RUN_ID"
 else
   case "$OUT_DIR" in
     /*) ;;
@@ -141,6 +166,7 @@ fi
 
 echo "Running sim_run"
 echo "  mode=$MODE backend=$BACKEND steps=$STEPS output_every=$OUTPUT_EVERY seed=$SEED"
+echo "  purpose=$PURPOSE tag=${TAG:-none}"
 echo "  case=$MODEL_DIR/model.yaml"
 echo "  out=$OUT_DIR"
 
