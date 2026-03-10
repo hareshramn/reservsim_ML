@@ -1,6 +1,6 @@
-# Reservoir GPU PINN Mini-Project
+# CUDA-Accelerated Reservoir Simulation (IMPES) + Physics-Informed ML Surrogate
 
-Portfolio-focused, 2-week project to demonstrate reservoir simulation, CUDA optimization, and physics-informed ML surrogate modeling.
+GPU-accelerated IMPES reservoir simulator with physics-informed ML surrogate, CUDA optimization, and reproducible HPC benchmarking.
 
 ## Goal
 
@@ -15,6 +15,24 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - GPU kernel design and profiling discipline.
 - ML surrogate design linked to physical constraints.
 - Reproducible engineering workflow suitable for technical interviews.
+
+## Recruiter Keywords
+
+- Reservoir Simulation
+- CUDA
+- GPU Acceleration
+- High-Performance Computing (HPC)
+- Numerical Methods
+- IMPES
+- Finite Volume / TPFA
+- Physics-Informed ML
+- Surrogate Modeling
+- Scientific Computing
+- Performance Optimization
+- Profiling (Nsight)
+- Parallel Computing
+- C++ and Python
+- Reproducible Benchmarks
 
 ## Planned Repo Map
 
