@@ -43,7 +43,7 @@ def parse_output_dir(stdout: str) -> Path:
     raise RuntimeError("Could not parse output directory from workflow output")
 
 
-def run_case(root: Path, model: str, backend: str, seed: int, steps: int, output_every: int, gpu_init_retries: int) -> Path:
+def run_case(root: Path, model: str, backend: str, repeat_idx: int, steps: int, output_every: int, gpu_init_retries: int) -> Path:
     cmd = [
         str(root / "workflow"),
         "run",
@@ -57,12 +57,10 @@ def run_case(root: Path, model: str, backend: str, seed: int, steps: int, output
         str(steps),
         "--output-every",
         str(output_every),
-        "--seed",
-        str(seed),
         "--purpose",
         "benchmark",
         "--tag",
-        "benchmark-matrix",
+        f"benchmark-matrix-r{repeat_idx}",
     ]
     if backend == "gpu":
         cmd += ["--gpu-init-retries", str(gpu_init_retries)]
@@ -70,7 +68,7 @@ def run_case(root: Path, model: str, backend: str, seed: int, steps: int, output
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout)
         sys.stderr.write(proc.stderr)
-        raise RuntimeError(f"workflow run failed for backend={backend} seed={seed}")
+        raise RuntimeError(f"workflow run failed for backend={backend} repeat={repeat_idx}")
     return parse_output_dir(proc.stdout)
 
 
@@ -94,20 +92,21 @@ def read_meta(run_dir: Path) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run CPU/GPU benchmark matrix and emit benchmarks/benchmark_summary.csv")
     ap.add_argument("--model", required=True)
-    ap.add_argument("--seeds", default="1,2,3")
+    ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--steps", type=int, default=50)
     ap.add_argument("--output-every", type=int, default=10)
     ap.add_argument("--gpu-init-retries", type=int, default=2)
     ap.add_argument("--out", default="benchmarks/benchmark_summary.csv")
     args = ap.parse_args()
 
-    seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+    if args.repeats <= 0:
+        raise SystemExit("error: --repeats must be >= 1")
     root = Path(__file__).resolve().parent.parent
     rows: list[dict] = []
 
-    for seed in seeds:
-      cpu_dir = run_case(root, args.model, "cpu", seed, args.steps, args.output_every, args.gpu_init_retries)
-      gpu_dir = run_case(root, args.model, "gpu", seed, args.steps, args.output_every, args.gpu_init_retries)
+    for repeat_idx in range(1, args.repeats + 1):
+      cpu_dir = run_case(root, args.model, "cpu", repeat_idx, args.steps, args.output_every, args.gpu_init_retries)
+      gpu_dir = run_case(root, args.model, "gpu", repeat_idx, args.steps, args.output_every, args.gpu_init_retries)
 
       cpu_meta = read_meta(cpu_dir)
       gpu_meta = read_meta(gpu_dir)
@@ -154,7 +153,7 @@ def main() -> int:
           "l2_sw": l2_sw,
           "l2_p": l2_p,
       })
-      print(f"completed seed={seed} cpu_run={cpu_meta['run_id']} gpu_run={gpu_meta['run_id']}")
+      print(f"completed repeat={repeat_idx} cpu_run={cpu_meta['run_id']} gpu_run={gpu_meta['run_id']}")
 
     out = Path(args.out)
     if not out.is_absolute():

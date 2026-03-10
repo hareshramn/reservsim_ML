@@ -20,7 +20,7 @@ Commands:
 
   run --model <modelN> [run options]
       Run one model from repo root.
-      Run options: --mode --backend --steps --output-every --seed --out --gpu-init-retries --purpose --tag
+      Run options: --mode --backend --steps --output-every --out --gpu-init-retries --purpose --tag
 
   plot --model <modelN> [--run <run_id_or_path>] [--out <dir>] [--check-only]
       Plot a run; if --run is omitted, latest run under cases/<model>/outputs is used.
@@ -28,8 +28,8 @@ Commands:
   validate --run <run_id_or_path>
       Validate required run artifacts and schema contracts.
 
-  parity --model <modelN> --seed <N> [--cpu-run <id_or_path>] [--gpu-run <id_or_path>]
-      Compare latest CPU/GPU artifacts and report parity metrics.
+  parity --model <modelN> [--cpu-run <id_or_path>] [--gpu-run <id_or_path>]
+      Compare latest CPU/GPU artifacts and report parity metrics (latest runs by default).
 
   bench --model <modelN> [bench options]
       Execute CPU/GPU matrix and write benchmarks/benchmark_summary.csv.
@@ -44,7 +44,6 @@ Commands:
         --backend <cpu|gpu>           (default: cpu)
         --steps <N>                   (default: 10)
         --output-every <N>            (default: 1)
-        --seed <N>                    (default: 7)
         --gpu-init-retries <N>        (default: 0)
         --purpose <adhoc|benchmark|ml-data> (default: adhoc)
         --tag <name>                  (optional run label)
@@ -58,14 +57,14 @@ Commands:
 Examples:
   ./workflow compile --mode debug --cuda off
   ./workflow doctor
-  ./workflow gpu-check --model model1 --mode release --seed 7
+  ./workflow gpu-check --model model1 --mode release
   ./workflow run --model model1 --steps 10 --mode release
   ./workflow validate --run cases/model1/outputs/ml-data/<run_id>
-  ./workflow parity --model model1 --seed 7
-  ./workflow bench --model model1 --seeds 1,2,3 --steps 50
+  ./workflow parity --model model1
+  ./workflow bench --model model1 --repeats 3 --steps 50
   ./workflow plot --model model1
   ./workflow clean --model model1 --keep 3 --apply
-  ./workflow all --model model1 --steps 10 --seed 7
+  ./workflow all --model model1 --steps 10
 USAGE
 }
 
@@ -271,7 +270,6 @@ case "$cmd" in
     backend="cpu"
     steps="10"
     output_every="1"
-    seed="7"
     gpu_init_retries="0"
     purpose="adhoc"
     tag=""
@@ -289,7 +287,6 @@ case "$cmd" in
         --backend) backend="${2:-}"; shift 2 ;;
         --steps) steps="${2:-}"; shift 2 ;;
         --output-every) output_every="${2:-}"; shift 2 ;;
-        --seed) seed="${2:-}"; shift 2 ;;
         --gpu-init-retries) gpu_init_retries="${2:-}"; shift 2 ;;
         --purpose) purpose="${2:-}"; shift 2 ;;
         --tag) tag="${2:-}"; shift 2 ;;
@@ -342,7 +339,6 @@ case "$cmd" in
       --backend "$backend" \
       --steps "$steps" \
       --output-every "$output_every" \
-      --seed "$seed" \
       --gpu-init-retries "$gpu_init_retries" \
       --purpose "$purpose" \
       --tag "$tag" \

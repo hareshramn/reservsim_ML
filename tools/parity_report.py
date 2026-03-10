@@ -16,7 +16,16 @@ if os.environ.get("RESERV_USE_VENV_PY") != "1":
 import numpy as np
 
 
-def resolve_run(root: Path, model: str, seed: int, backend: str, run_hint: str | None) -> Path:
+def list_backend_runs(outputs: Path, backend: str) -> list[Path]:
+    runs = list(outputs.glob(f"**/*__{backend}__*"))
+    if not runs:
+        runs = list(outputs.glob(f"**/*_{backend}_*"))
+    runs = [p for p in runs if p.is_dir() and (p / "meta.json").exists()]
+    runs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return runs
+
+
+def resolve_run(root: Path, model: str, backend: str, run_hint: str | None) -> Path:
     if run_hint:
         p = Path(run_hint)
         if not p.is_absolute():
@@ -31,26 +40,58 @@ def resolve_run(root: Path, model: str, seed: int, backend: str, run_hint: str |
     outputs = root / "cases" / model / "outputs"
     if not outputs.is_dir():
         raise FileNotFoundError(f"Model outputs not found: {outputs}")
-    matches = sorted(outputs.glob(f"**/*__{backend}__s{seed}__*"))
+    matches = list_backend_runs(outputs, backend)
     if not matches:
-        matches = sorted(outputs.glob(f"*_{backend}_{seed}"))
-    if not matches:
-        raise FileNotFoundError(f"No {backend} runs found for seed={seed} under {outputs}")
-    return matches[-1]
+        raise FileNotFoundError(f"No {backend} runs found under {outputs}")
+    return matches[0]
+
+
+def find_shape_matched_run(outputs: Path, backend: str, reference_shape: tuple[int, ...], exclude: Path | None = None) -> Path | None:
+    for candidate in list_backend_runs(outputs, backend):
+        if exclude is not None and candidate == exclude:
+            continue
+        try:
+            candidate_shape = tuple(np.load(candidate / "state_pressure.npy").shape)
+        except Exception:
+            continue
+        if candidate_shape == reference_shape:
+            return candidate
+    return None
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="CPU/GPU parity report for a model seed")
+    ap = argparse.ArgumentParser(description="CPU/GPU parity report for a model")
     ap.add_argument("--model", required=True)
-    ap.add_argument("--seed", required=True, type=int)
     ap.add_argument("--cpu-run")
     ap.add_argument("--gpu-run")
     ap.add_argument("--out", help="Optional output JSON path")
     args = ap.parse_args()
 
     root = Path(__file__).resolve().parent.parent
-    cpu_run = resolve_run(root, args.model, args.seed, "cpu", args.cpu_run)
-    gpu_run = resolve_run(root, args.model, args.seed, "gpu", args.gpu_run)
+    outputs = root / "cases" / args.model / "outputs"
+    cpu_run = resolve_run(root, args.model, "cpu", args.cpu_run)
+    gpu_run = resolve_run(root, args.model, "gpu", args.gpu_run)
+
+    # Without seed filtering, latest CPU/GPU runs may not align in step count.
+    # When no explicit run hint is provided for one side, auto-match by pressure tensor shape.
+    cpu_shape = tuple(np.load(cpu_run / "state_pressure.npy").shape)
+    gpu_shape = tuple(np.load(gpu_run / "state_pressure.npy").shape)
+    if cpu_shape != gpu_shape:
+        if args.gpu_run is None:
+            matched_gpu = find_shape_matched_run(outputs, "gpu", cpu_shape, exclude=gpu_run)
+            if matched_gpu is not None:
+                gpu_run = matched_gpu
+                gpu_shape = tuple(np.load(gpu_run / "state_pressure.npy").shape)
+        if cpu_shape != gpu_shape and args.cpu_run is None:
+            matched_cpu = find_shape_matched_run(outputs, "cpu", gpu_shape, exclude=cpu_run)
+            if matched_cpu is not None:
+                cpu_run = matched_cpu
+                cpu_shape = tuple(np.load(cpu_run / "state_pressure.npy").shape)
+        if cpu_shape != gpu_shape:
+            raise RuntimeError(
+                f"Could not auto-pair CPU/GPU runs with matching shapes: cpu={cpu_run.name}{cpu_shape}, "
+                f"gpu={gpu_run.name}{gpu_shape}. Pass --cpu-run/--gpu-run explicitly."
+            )
 
     cp = np.load(cpu_run / "state_pressure.npy")
     gp = np.load(gpu_run / "state_pressure.npy")

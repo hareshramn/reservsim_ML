@@ -125,7 +125,7 @@ void test_output_every_and_schema(const fs::path& build_dir) {
     const std::string cmd =
         shell_quote(sim_run.string()) +
         " --case " + shell_quote(fixture_case_path()) +
-        " --backend cpu --steps 5 --output-every 2 --seed 7 --out " + shell_quote(out_dir.string()) +
+        " --backend cpu --steps 5 --output-every 2 --out " + shell_quote(out_dir.string()) +
         " > /dev/null 2>&1";
     expect_true(command_exit_code(run_command(cmd)) == 0, "sim_run returns success");
 
@@ -177,7 +177,7 @@ void test_output_every_larger_than_steps_writes_final_checkpoint(const fs::path&
     const std::string cmd =
         shell_quote(sim_run.string()) +
         " --case " + shell_quote(fixture_case_path()) +
-        " --backend cpu --steps 3 --output-every 10 --seed 7 --out " + shell_quote(out_dir.string()) +
+        " --backend cpu --steps 3 --output-every 10 --out " + shell_quote(out_dir.string()) +
         " > /dev/null 2>&1";
     expect_true(command_exit_code(run_command(cmd)) == 0, "sim_run returns success");
 
@@ -209,7 +209,7 @@ void test_step_acceptance_failure_emits_json_error(const fs::path& build_dir) {
     const std::string cmd =
         "SIM_FORCE_STEP_ACCEPTANCE_FAIL=1 " + shell_quote(sim_run.string()) +
         " --case " + shell_quote(fixture_case_path()) +
-        " --backend cpu --steps 2 --output-every 1 --seed 7 --out " + shell_quote(out_dir.string()) +
+        " --backend cpu --steps 2 --output-every 1 --out " + shell_quote(out_dir.string()) +
         " > /dev/null 2> " + shell_quote(err_path.string());
     const int exit_code = command_exit_code(run_command(cmd));
     expect_true(exit_code == 5, "forced acceptance failure returns E_CASE_SCHEMA (5)");

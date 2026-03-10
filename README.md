@@ -74,7 +74,7 @@ Manual path (single entry point from repo root):
 ./workflow run --model model1 --steps 10 --mode release
 ./workflow plot --model model1
 ./workflow clean --model model1 --keep 3 --apply
-./workflow all --model model1 --steps 10 --seed 7
+./workflow all --model model1 --steps 10
 ```
 
 Model convention:

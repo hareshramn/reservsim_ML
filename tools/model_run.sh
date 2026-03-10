@@ -9,7 +9,6 @@ MODE="release"
 BACKEND="cpu"
 STEPS="10"
 OUTPUT_EVERY="1"
-SEED="7"
 GPU_INIT_RETRIES="0"
 PURPOSE="adhoc"
 TAG=""
@@ -18,7 +17,7 @@ OUT_DIR="auto"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--seed N] [--gpu-init-retries N] [--purpose adhoc|benchmark|ml-data] [--tag name] [--out path]
+  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--gpu-init-retries N] [--purpose adhoc|benchmark|ml-data] [--tag name] [--out path]
 
 Defaults come from run.env in the selected model folder.
 CLI arguments override run.env values.
@@ -70,7 +69,6 @@ if [[ -f "$MODEL_DIR/run.env" ]]; then
   BACKEND="${SIM_BACKEND:-$BACKEND}"
   STEPS="${SIM_STEPS:-$STEPS}"
   OUTPUT_EVERY="${SIM_OUTPUT_EVERY:-$OUTPUT_EVERY}"
-  SEED="${SIM_SEED:-$SEED}"
   GPU_INIT_RETRIES="${SIM_GPU_INIT_RETRIES:-$GPU_INIT_RETRIES}"
   PURPOSE="${SIM_RUN_PURPOSE:-$PURPOSE}"
   TAG="${SIM_RUN_TAG:-$TAG}"
@@ -85,7 +83,6 @@ while [[ $# -gt 0 ]]; do
     --backend) BACKEND="${2:-}"; shift 2 ;;
     --steps) STEPS="${2:-}"; shift 2 ;;
     --output-every) OUTPUT_EVERY="${2:-}"; shift 2 ;;
-    --seed) SEED="${2:-}"; shift 2 ;;
     --gpu-init-retries) GPU_INIT_RETRIES="${2:-}"; shift 2 ;;
     --purpose) PURPOSE="${2:-}"; shift 2 ;;
     --tag) TAG="${2:-}"; shift 2 ;;
@@ -155,7 +152,7 @@ if [[ "$OUT_DIR" == "auto" ]]; then
   if [[ -n "$TAG" ]]; then
     run_tag="__$(sanitize_component "$TAG")"
   fi
-  RUN_ID="$(date +%Y%m%d_%H%M%S_%3N)__${model_name}__${BACKEND}__s${SEED}__n${STEPS}__oe${OUTPUT_EVERY}${run_tag}"
+  RUN_ID="$(date +%Y%m%d_%H%M%S_%3N)__${model_name}__${BACKEND}__n${STEPS}__oe${OUTPUT_EVERY}${run_tag}"
   OUT_DIR="$MODEL_DIR/outputs/$PURPOSE/$RUN_ID"
 else
   case "$OUT_DIR" in
@@ -165,7 +162,7 @@ else
 fi
 
 echo "Running sim_run"
-echo "  mode=$MODE backend=$BACKEND steps=$STEPS output_every=$OUTPUT_EVERY seed=$SEED"
+echo "  mode=$MODE backend=$BACKEND steps=$STEPS output_every=$OUTPUT_EVERY"
 echo "  purpose=$PURPOSE tag=${TAG:-none}"
 echo "  case=$MODEL_DIR/model.yaml"
 echo "  out=$OUT_DIR"
@@ -183,7 +180,6 @@ while true; do
     --backend "$BACKEND" \
     --steps "$STEPS" \
     --output-every "$OUTPUT_EVERY" \
-    --seed "$SEED" \
     --out "$OUT_DIR"
   rc=$?
   if [[ $rc -eq 0 ]]; then

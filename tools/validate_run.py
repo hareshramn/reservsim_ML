@@ -71,7 +71,7 @@ def main() -> int:
         return 1
 
     meta = json.loads((run_dir / "meta.json").read_text())
-    for k in ["run_id", "backend", "seed", "nx", "ny", "steps_completed", "transport_mass_balance_rel_max"]:
+    for k in ["run_id", "backend", "nx", "ny", "steps_completed", "transport_mass_balance_rel_max"]:
         if k not in meta:
             errors.append(f"meta missing key: {k}")
 
@@ -97,7 +97,7 @@ def main() -> int:
         return 1
 
     print(f"[ok] validated run: {run_dir}")
-    print(f"[ok] backend={meta['backend']} seed={meta['seed']} steps_completed={meta['steps_completed']}")
+    print(f"[ok] backend={meta['backend']} steps_completed={meta['steps_completed']}")
     return 0
 
 

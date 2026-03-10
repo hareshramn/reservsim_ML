@@ -21,7 +21,7 @@
 ### Simulator
 
 ```bash
-sim_run --case <path> --backend cpu|gpu --steps <N> --seed <int> --out <dir>
+sim_run --case <path> --backend cpu|gpu --steps <N> --out <dir>
 ```
 
 ### Simulator Error Codes (Locked v1)
@@ -63,7 +63,7 @@ Each run writes:
 - `timing.csv` with both per-step and aggregate runtime metrics
 
 `meta.json` minimum fields:
-- `case_name`, `nx`, `ny`, `backend`, `dt_policy`, `seed`, `units`, `version`.
+- `case_name`, `nx`, `ny`, `backend`, `dt_policy`, `units`, `version`.
 
 ## Interface Stability Policy
 
@@ -79,7 +79,7 @@ This section is planning-only and becomes executable after the pre-implementatio
 ### Slice 0: CLI Shell and Config Validation
 
 - Unit boundary:
-  - `main.cpp` argument handling for `sim_run --case --backend --steps --seed --out`.
+  - `main.cpp` argument handling for `sim_run --case --backend --steps --out`.
   - Config validation with fail-fast errors and no physics compute.
 - Tests:
   - valid minimal case returns success and writes `meta.json` skeleton.
@@ -129,7 +129,7 @@ This section is planning-only and becomes executable after the pre-implementatio
   - residual norm threshold checks.
   - regression fixture comparing against a locked tiny-case reference.
 - Exit criteria:
-  - pressure solver convergence policy is deterministic under fixed seed.
+  - pressure solver convergence policy is deterministic under fixed inputs.
 
 ### Slice 5: Saturation Transport Step
 
@@ -157,7 +157,7 @@ This section is planning-only and becomes executable after the pre-implementatio
 - Unit boundary:
   - full `for step in N` orchestration, dt policy hook, and checkpoint cadence.
 - Tests:
-  - deterministic replay with identical seed.
+  - deterministic replay with identical configuration and backend.
   - early-stop behavior at schedule end.
 - Exit criteria:
   - stable loop semantics independent of backend setting.

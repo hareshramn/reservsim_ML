@@ -25,7 +25,6 @@ struct Args {
     std::string backend;
     int steps = 0;
     int output_every = 1;
-    int seed = 0;
     std::string out_dir;
 };
 
@@ -131,8 +130,8 @@ Args parse_args(int argc, char** argv) {
         kv[token] = value;
     }
 
-    const std::vector<std::string> required_flags = {"--case", "--backend", "--steps", "--seed", "--out"};
-    const std::vector<std::string> known_flags = {"--case", "--backend", "--steps", "--output-every", "--seed", "--out"};
+    const std::vector<std::string> required_flags = {"--case", "--backend", "--steps", "--out"};
+    const std::vector<std::string> known_flags = {"--case", "--backend", "--steps", "--output-every", "--out"};
     for (const auto& flag : required_flags) {
         if (kv.find(flag) == kv.end()) {
             emit_and_exit(ExitCode::E_ARG_MISSING, "E_ARG_MISSING", "Missing required flag: " + flag);
@@ -150,16 +149,6 @@ Args parse_args(int argc, char** argv) {
     args.steps = parse_positive_int_arg(kv["--steps"], "steps");
     if (const auto it = kv.find("--output-every"); it != kv.end()) {
         args.output_every = parse_positive_int_arg(it->second, "output-every");
-    }
-
-    try {
-        size_t idx = 0;
-        args.seed = std::stoi(kv["--seed"], &idx);
-        if (idx != kv["--seed"].size()) {
-            emit_and_exit(ExitCode::E_ARG_INVALID, "E_ARG_INVALID", "seed must be an integer.");
-        }
-    } catch (const std::exception&) {
-        emit_and_exit(ExitCode::E_ARG_INVALID, "E_ARG_INVALID", "seed must be an integer.");
     }
 
     args.out_dir = kv["--out"];
@@ -264,7 +253,6 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
          << "  \"ny\": " << cfg.ny << ",\n"
          << "  \"backend\": \"" << args.backend << "\",\n"
          << "  \"dt_policy\": \"" << json_escape(cfg.dt_policy) << "\",\n"
-         << "  \"seed\": " << args.seed << ",\n"
          << "  \"units\": \"" << json_escape(cfg.units) << "\",\n"
          << "  \"version\": \"slice4\",\n"
          << "  \"steps_requested\": " << args.steps << ",\n"

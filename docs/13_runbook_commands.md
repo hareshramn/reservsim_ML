@@ -4,8 +4,7 @@ This document defines command contracts. It does not imply implementation alread
 
 ## Global Reproducibility Policy
 
-- Seed is mandatory for every run.
-- Auto run ID format: `YYYYMMDD_HHMMSS_mmm__<model>__<backend>__s<seed>__n<steps>__oe<k>[__<tag>]`.
+- Auto run ID format: `YYYYMMDD_HHMMSS_mmm__<model>__<backend>__n<steps>__oe<k>[__<tag>]`.
 - Auto-managed outputs must be saved under `outputs/<purpose>/<run_id>/`.
 - Purpose buckets are:
   - `adhoc` for manual/exploratory runs,
@@ -17,8 +16,8 @@ This document defines command contracts. It does not imply implementation alread
 ### Simulator Run
 
 ```bash
-sim_run --case <path> --backend cpu|gpu --steps <N> --output-every <k> --seed <int> --out <dir>
-tools/model_run.sh --model-dir <dir> --backend cpu|gpu --steps <N> --output-every <k> --seed <int> --purpose adhoc|benchmark|ml-data --tag <label> --out auto|<dir>
+sim_run --case <path> --backend cpu|gpu --steps <N> --output-every <k> --out <dir>
+tools/model_run.sh --model-dir <dir> --backend cpu|gpu --steps <N> --output-every <k> --purpose adhoc|benchmark|ml-data --tag <label> --out auto|<dir>
 ```
 
 Expected behavior:
@@ -86,7 +85,6 @@ For each run directory:
 
 ## Checklist Before Accepting Any Run
 
-1. Seed present in metadata.
-2. Run directory matches naming policy when `--out auto` is used.
-3. Required files exist.
-4. Metrics parse without schema errors.
+1. Run directory matches naming policy when `--out auto` is used.
+2. Required files exist.
+3. Metrics parse without schema errors.

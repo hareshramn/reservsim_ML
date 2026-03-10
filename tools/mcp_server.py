@@ -65,7 +65,6 @@ def run_model(
     backend: str = "cpu",
     steps: int = 10,
     output_every: int = 1,
-    seed: int = 7,
     out: str = "auto",
 ) -> dict[str, Any]:
     """Run one case model."""
@@ -82,8 +81,6 @@ def run_model(
         str(steps),
         "--output-every",
         str(output_every),
-        "--seed",
-        str(seed),
         "--out",
         out,
     ]
@@ -136,7 +133,6 @@ def clean_outputs(
 def all_in_one(
     model: str,
     steps: int = 10,
-    seed: int = 7,
     mode: str = "release",
     backend: str = "cpu",
     output_every: int = 1,
@@ -149,8 +145,6 @@ def all_in_one(
         model,
         "--steps",
         str(steps),
-        "--seed",
-        str(seed),
         "--mode",
         mode,
         "--backend",

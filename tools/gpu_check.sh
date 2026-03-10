@@ -6,7 +6,6 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 MODEL_DIR=""
 MODE="release"
-SEED="7"
 STEPS="1"
 OUTPUT_EVERY="1"
 GPU_INIT_RETRIES="2"
@@ -14,7 +13,7 @@ GPU_INIT_RETRIES="2"
 usage() {
   cat <<'USAGE'
 Usage:
-  tools/gpu_check.sh --model-dir <path> [--mode debug|release] [--seed N] [--steps N] [--output-every N] [--gpu-init-retries N]
+  tools/gpu_check.sh --model-dir <path> [--mode debug|release] [--steps N] [--output-every N] [--gpu-init-retries N]
 USAGE
 }
 
@@ -22,7 +21,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --model-dir) MODEL_DIR="${2:-}"; shift 2 ;;
     --mode) MODE="${2:-}"; shift 2 ;;
-    --seed) SEED="${2:-}"; shift 2 ;;
     --steps) STEPS="${2:-}"; shift 2 ;;
     --output-every) OUTPUT_EVERY="${2:-}"; shift 2 ;;
     --gpu-init-retries) GPU_INIT_RETRIES="${2:-}"; shift 2 ;;
@@ -49,5 +47,4 @@ exec "$ROOT_DIR/tools/model_run.sh" \
   --backend gpu \
   --steps "$STEPS" \
   --output-every "$OUTPUT_EVERY" \
-  --seed "$SEED" \
   --gpu-init-retries "$GPU_INIT_RETRIES"
