@@ -2,10 +2,11 @@
 
 ## Objective
 
-Deliver a portfolio-grade mini-project in 2 weeks that demonstrates:
+Deliver a focused mini-project in 2 weeks that demonstrates:
 - two-phase reservoir simulation competence,
 - GPU optimization competence on RTX 3060,
 - ML surrogate integration with physics-aware constraints.
+- practical, reproducible forecasting workflow design.
 
 ## In Scope
 
@@ -47,3 +48,4 @@ Deliver a portfolio-grade mini-project in 2 weeks that demonstrates:
 - Reservoir simulation practitioners and researchers.
 - GPU/HPC engineering practitioners.
 - Applied ML practitioners in scientific computing.
+- Engineering and product stakeholders evaluating simulation workflow outcomes.

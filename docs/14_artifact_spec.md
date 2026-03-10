@@ -1,6 +1,6 @@
 # 14 Artifact Specification
 
-## Portfolio Artifact Set
+## Project Artifact Set
 
 1. Benchmark summary CSV.
 2. Numerical validation CSV.

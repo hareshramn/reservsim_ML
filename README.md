@@ -1,6 +1,6 @@
-# CUDA-Accelerated Reservoir Simulation (IMPES) + Physics-Informed ML Surrogate
+# High-Speed Reservoir Simulation with GPU + AI
 
-GPU-accelerated IMPES reservoir simulator with physics-informed ML surrogate, CUDA optimization, and reproducible HPC benchmarking.
+Simulate two-phase reservoir flow, accelerate compute with GPU, and add an AI surrogate for faster forecasting with validated accuracy.
 
 ## Goal
 
@@ -9,14 +9,21 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - measurable CPU vs GPU acceleration on RTX 3060,
 - surrogate-assisted prediction with physics-informed losses.
 
-## What This Demonstrates
+## At a Glance
+
+- Models how water and oil move in a synthetic reservoir.
+- Uses GPU acceleration to reduce runtime for repeated studies.
+- Uses an AI surrogate to speed up prediction workflows.
+- Produces reproducible artifacts for transparent validation.
+
+## Why It Matters
 
 - Reservoir physics and numerical methods (Darcy flow + saturation transport).
 - GPU kernel design and profiling discipline.
 - ML surrogate design linked to physical constraints.
 - Reproducible engineering workflow suitable for technical evaluation.
 
-## Technical Keywords
+## Keywords
 
 - Reservoir Simulation
 - CUDA
@@ -34,7 +41,7 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - C++ and Python
 - Reproducible Benchmarks
 
-## Planned Repo Map
+## Repo Map
 
 ```text
 .
@@ -57,10 +64,12 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 │   ├── 12_agent_task_board.md
 │   ├── 13_runbook_commands.md
 │   └── 14_artifact_spec.md
-├── core-cpp/      (to be implemented)
-├── python/        (to be implemented)
-├── cases/         (to be implemented)
-└── outputs/       (generated artifacts)
+├── core-cpp/      (C++ simulation core, builds, tests)
+├── python/        (ML and visualization scripts)
+├── cases/         (model configs and scenario inputs)
+├── tools/         (workflow scripts, MCP server, web UI)
+├── benchmarks/    (benchmark artifacts and summaries)
+└── outputs/       (generated run artifacts)
 ```
 
 ## Start Here
