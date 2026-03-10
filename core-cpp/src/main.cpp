@@ -585,6 +585,7 @@ RunSummary execute_time_loop(
     const std::string& backend) {
     RunSummary summary;
     const size_t cells_per_state = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny);
+    const int progress_every = std::max(1, ctx.steps_to_run / 100); // ~1% cadence
 
     for (int step = 0; step < ctx.steps_to_run; ++step) {
         const RunDiagnostics diagnostics = run_step_with_retry_policy(cfg, state, backend);
@@ -595,7 +596,8 @@ RunSummary execute_time_loop(
         summary.step_retries_total += diagnostics.retries_used;
         summary.step_retries_max = std::max(summary.step_retries_max, diagnostics.retries_used);
 
-        if (should_write_checkpoint(step, ctx.steps_to_run, output_every)) {
+        const bool checkpoint = should_write_checkpoint(step, ctx.steps_to_run, output_every);
+        if (checkpoint) {
             summary.pressure_history.insert(summary.pressure_history.end(), state.pressure.begin(), state.pressure.end());
             summary.sw_history.insert(summary.sw_history.end(), state.sw.begin(), state.sw.end());
             summary.well_rates_history.insert(
@@ -607,6 +609,15 @@ RunSummary execute_time_loop(
                 diagnostics.well_bhp_step.begin(),
                 diagnostics.well_bhp_step.end());
             ++summary.checkpoint_count;
+        }
+
+        const int one_based = step + 1;
+        const bool print_progress = (one_based == 1) || (one_based == ctx.steps_to_run) || (one_based % progress_every == 0);
+        if (print_progress) {
+            std::cout << "[progress] step " << one_based << "/" << ctx.steps_to_run
+                      << " checkpoint=" << (checkpoint ? "yes" : "no")
+                      << " mass_balance_rel=" << diagnostics.transport.mass_balance_rel
+                      << std::endl;
         }
     }
 

@@ -42,9 +42,7 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
         FieldSpec("backend", "Backend", "enum", default="cpu", choices=("cpu", "gpu")),
         FieldSpec("steps", "Steps", "text", default="10"),
         FieldSpec("output_every", "Output Every", "text", default="1"),
-        FieldSpec("gpu_init_retries", "GPU Init Retries", "text", default="0"),
         FieldSpec("tag", "Tag", "text"),
-        FieldSpec("case_file", "Case File", "text"),
         FieldSpec("out", "Out", "text", default="auto"),
     ],
     "ml-data-gen": [
@@ -54,7 +52,6 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
         FieldSpec("backend", "Backend", "enum", default="cpu", choices=("cpu", "gpu")),
         FieldSpec("steps", "Steps", "text", default="200"),
         FieldSpec("output_every", "Output Every", "text", default="1"),
-        FieldSpec("gpu_init_retries", "GPU Init Retries", "text", default="0"),
         FieldSpec("keep_temp", "Keep Temp", "bool"),
     ],
     "ml-check": [
@@ -64,7 +61,6 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
         FieldSpec("backend", "Backend", "enum", default="cpu", choices=("cpu", "gpu")),
         FieldSpec("steps", "Steps", "text", default="200"),
         FieldSpec("output_every", "Output Every", "text", default="1"),
-        FieldSpec("gpu_init_retries", "GPU Init Retries", "text", default="2"),
         FieldSpec("bench_repeats", "Bench Repeats", "text", default="3"),
         FieldSpec("bench_steps", "Bench Steps", "text", default="50"),
         FieldSpec("bench_output_every", "Bench Output Every", "text", default="10"),
@@ -85,7 +81,6 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
         FieldSpec("repeats", "Repeats", "text", default="3"),
         FieldSpec("steps", "Steps", "text", default="50"),
         FieldSpec("output_every", "Output Every", "text", default="10"),
-        FieldSpec("gpu_init_retries", "GPU Init Retries", "text", default="2"),
         FieldSpec("out", "Out CSV", "text"),
     ],
     "plot": [
@@ -95,9 +90,8 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
         FieldSpec("check_only", "Check Only", "bool"),
     ],
     "clean": [
-        FieldSpec("model", "Model", "enum"),
-        FieldSpec("all", "All Models", "bool"),
-        FieldSpec("bucket", "Bucket(s)", "text"),
+        FieldSpec("model", "Model", "enum", required=True),
+        FieldSpec("bucket", "Type of run", "enum", default="all", choices=("all", "adhoc", "benchmark", "ml-data", "legacy")),
         FieldSpec("keep", "Keep Newest N", "text", default="5"),
         FieldSpec("apply", "Apply", "bool"),
     ],
@@ -112,7 +106,6 @@ ARG_FLAG = {
     "output_every": "--output-every",
     "gpu_init_retries": "--gpu-init-retries",
     "tag": "--tag",
-    "case_file": "--case-file",
     "out": "--out",
     "plan": "--plan",
     "keep_temp": "--keep-temp",
@@ -126,7 +119,6 @@ ARG_FLAG = {
     "gpu_run": "--gpu-run",
     "repeats": "--repeats",
     "check_only": "--check-only",
-    "all": "--all",
     "bucket": "--bucket",
     "keep": "--keep",
     "apply": "--apply",
@@ -235,18 +227,10 @@ class WorkflowGui:
                 raise ValueError(f"Missing required field: {spec.label}")
             if not value:
                 continue
+            if mode == "clean" and spec.key == "bucket" and value == "all":
+                continue
 
             cmd.extend([flag, value])
-
-        if mode == "clean":
-            all_var = self._field_vars["all"]
-            model_var = self._field_vars["model"]
-            assert isinstance(all_var, BooleanVar)
-            assert isinstance(model_var, StringVar)
-            if not all_var.get() and not model_var.get().strip():
-                raise ValueError("Clean requires either Model or All Models.")
-            if all_var.get() and model_var.get().strip():
-                raise ValueError("Choose either Model or All Models for clean, not both.")
 
         return cmd
 
