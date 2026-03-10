@@ -17,7 +17,7 @@ This document defines command contracts. It does not imply implementation alread
 
 ```bash
 sim_run --case <path> --backend cpu|gpu --steps <N> --output-every <k> --out <dir>
-tools/model_run.sh --model-dir <dir> --backend cpu|gpu --steps <N> --output-every <k> --purpose adhoc|benchmark|ml-data --tag <label> --out auto|<dir>
+tools/model_run.sh --model-dir <dir> --backend cpu|gpu --steps <N> --output-every <k> --purpose adhoc|benchmark|ml-data --tag <label> --out auto|<dir> [--case-file <path>]
 ```
 
 Expected behavior:
@@ -26,8 +26,23 @@ Expected behavior:
 - Persist schema-defined arrays and metadata.
 - Emit `timing.csv`.
 - If `--out auto`, place the run under the selected purpose bucket.
+- If `--case-file` is provided, that case YAML is used for the run instead of `<model-dir>/model.yaml`.
 - On error, exit with stable code and emit one-line JSON on `stderr`:
   - `2` (`E_ARG_MISSING`), `3` (`E_ARG_INVALID`), `4` (`E_CASE_PARSE`), `5` (`E_CASE_SCHEMA`), `6` (`E_IO`).
+
+### ML Data Generation
+
+```bash
+tools/ml_data_generate.sh --model-dir <dir> --plan <scenario_csv> --steps <N> --output-every <k>
+./workflow ml-data-gen --model <modelN> --plan cases/<modelN>/ml_scenarios.csv --steps <N>
+```
+
+Expected behavior:
+- Read base `model.yaml`.
+- Generate temporary variant YAMLs from scenario CSV overrides.
+- Run each scenario into `outputs/ml-data/<run_id>/`.
+- Persist the exact case used for that run as `case_input.yaml` in the run directory.
+- Remove temporary generated YAML files when finished.
 
 ### Batch Benchmark
 

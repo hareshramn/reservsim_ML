@@ -13,11 +13,12 @@ GPU_INIT_RETRIES="0"
 PURPOSE="adhoc"
 TAG=""
 OUT_DIR="auto"
+CASE_FILE=""
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--gpu-init-retries N] [--purpose adhoc|benchmark|ml-data] [--tag name] [--out path]
+  ./run [--model-dir path] [--mode debug|release] [--backend cpu|gpu] [--steps N] [--output-every N] [--gpu-init-retries N] [--purpose adhoc|benchmark|ml-data] [--tag name] [--out path] [--case-file path]
 
 Defaults come from run.env in the selected model folder.
 CLI arguments override run.env values.
@@ -87,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --purpose) PURPOSE="${2:-}"; shift 2 ;;
     --tag) TAG="${2:-}"; shift 2 ;;
     --out) OUT_DIR="${2:-}"; shift 2 ;;
+    --case-file|--case) CASE_FILE="${2:-}"; shift 2 ;;
     -h|--help)
       usage
       exit 0
@@ -107,6 +109,21 @@ if [[ ! -d "$MODEL_DIR" ]]; then
 fi
 if [[ ! -f "$MODEL_DIR/model.yaml" ]]; then
   echo "model.yaml not found in $MODEL_DIR" >&2
+  exit 2
+fi
+
+if [[ -z "$CASE_FILE" ]]; then
+  CASE_FILE="$MODEL_DIR/model.yaml"
+elif [[ "$CASE_FILE" != /* ]]; then
+  if [[ -f "$CASE_FILE" ]]; then
+    CASE_FILE="$(pwd)/$CASE_FILE"
+  else
+    CASE_FILE="$MODEL_DIR/$CASE_FILE"
+  fi
+fi
+
+if [[ ! -f "$CASE_FILE" ]]; then
+  echo "Case file not found: $CASE_FILE" >&2
   exit 2
 fi
 
@@ -164,7 +181,7 @@ fi
 echo "Running sim_run"
 echo "  mode=$MODE backend=$BACKEND steps=$STEPS output_every=$OUTPUT_EVERY"
 echo "  purpose=$PURPOSE tag=${TAG:-none}"
-echo "  case=$MODEL_DIR/model.yaml"
+echo "  case=$CASE_FILE"
 echo "  out=$OUT_DIR"
 
 set +e
@@ -176,7 +193,7 @@ fi
 while true; do
   attempt=$((attempt + 1))
   "$BIN" \
-    --case "$MODEL_DIR/model.yaml" \
+    --case "$CASE_FILE" \
     --backend "$BACKEND" \
     --steps "$STEPS" \
     --output-every "$OUTPUT_EVERY" \

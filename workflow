@@ -20,7 +20,11 @@ Commands:
 
   run --model <modelN> [run options]
       Run one model from repo root.
-      Run options: --mode --backend --steps --output-every --out --gpu-init-retries --purpose --tag
+      Run options: --mode --backend --steps --output-every --out --gpu-init-retries --purpose --tag --case-file
+
+  ml-data-gen --model <modelN> [ml-data-gen options]
+      Generate ML-data runs from temporary case YAML variants.
+      ml-data-gen options: --plan --mode --backend --steps --output-every --gpu-init-retries --keep-temp
 
   plot --model <modelN> [--run <run_id_or_path>] [--out <dir>] [--check-only]
       Plot a run; if --run is omitted, latest run under cases/<model>/outputs is used.
@@ -59,6 +63,7 @@ Examples:
   ./workflow doctor
   ./workflow gpu-check --model model1 --mode release
   ./workflow run --model model1 --steps 10 --mode release
+  ./workflow ml-data-gen --model model1 --plan cases/model1/ml_scenarios.csv --steps 200
   ./workflow validate --run cases/model1/outputs/ml-data/<run_id>
   ./workflow parity --model model1
   ./workflow bench --model model1 --repeats 3 --steps 50
@@ -176,6 +181,32 @@ case "$cmd" in
     fi
     model_dir="$(resolve_model_dir "$model")"
     exec "$ROOT_DIR/tools/model_run.sh" --model-dir "$model_dir" "${run_args[@]}"
+    ;;
+
+  ml-data-gen)
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+      exec "$ROOT_DIR/tools/ml_data_generate.sh" --help
+    fi
+    model=""
+    args=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model)
+          model="${2:-}"
+          shift 2
+          ;;
+        *)
+          args+=("$1")
+          shift
+          ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+    exec "$ROOT_DIR/tools/ml_data_generate.sh" --model-dir "$model_dir" "${args[@]}"
     ;;
 
   validate)
