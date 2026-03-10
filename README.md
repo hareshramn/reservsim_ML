@@ -14,9 +14,9 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - Reservoir physics and numerical methods (Darcy flow + saturation transport).
 - GPU kernel design and profiling discipline.
 - ML surrogate design linked to physical constraints.
-- Reproducible engineering workflow suitable for technical interviews.
+- Reproducible engineering workflow suitable for technical evaluation.
 
-## Recruiter Keywords
+## Technical Keywords
 
 - Reservoir Simulation
 - CUDA

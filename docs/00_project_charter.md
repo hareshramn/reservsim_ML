@@ -44,7 +44,6 @@ Deliver a portfolio-grade mini-project in 2 weeks that demonstrates:
 
 ## Primary Audience
 
-- Reservoir simulation interview panels.
-- GPU/HPC engineering interviewers.
-- Applied ML hiring teams.
-
+- Reservoir simulation practitioners and researchers.
+- GPU/HPC engineering practitioners.
+- Applied ML practitioners in scientific computing.
