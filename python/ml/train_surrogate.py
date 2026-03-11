@@ -80,8 +80,15 @@ class Trajectory:
 
 
 def normalize_state_shape(arr: np.ndarray, nx: int, ny: int, name: str) -> np.ndarray:
+    if arr.ndim == 4:
+        # For 3D simulator runs, train surrogate on the middle-z slice.
+        if arr.shape[2:] == (ny, nx):
+            return arr[:, arr.shape[1] // 2, :, :]
+        if arr.shape[2:] == (nx, ny):
+            return arr[:, arr.shape[1] // 2, :, :].transpose(0, 2, 1)
+        fail(f"{name} 4D shape {arr.shape} incompatible with nx={nx}, ny={ny}")
     if arr.ndim != 3:
-        fail(f"{name} must be 3D, got shape {arr.shape}")
+        fail(f"{name} must be 3D/4D, got shape {arr.shape}")
     if arr.shape[1:] == (ny, nx):
         return arr
     if arr.shape[1:] == (nx, ny):

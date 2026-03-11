@@ -261,8 +261,11 @@ double dot_device(const double* a, const double* b, size_t n, PressureGpuWorkspa
 
 void validate_system_shape(const PressureSystem& system) {
     const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny);
-    if (system.nx <= 0 || system.ny <= 0) {
+    if (system.nx <= 0 || system.ny <= 0 || system.nz <= 0) {
         fail_schema("pressure system dimensions must be positive.");
+    }
+    if (system.nz != 1) {
+        fail_schema("GPU pressure backend currently supports only nz=1.");
     }
     if (system.diag.size() != count || system.west.size() != count || system.east.size() != count ||
         system.south.size() != count || system.north.size() != count || system.rhs.size() != count) {

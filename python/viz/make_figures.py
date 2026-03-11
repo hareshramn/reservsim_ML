@@ -83,7 +83,7 @@ def load_meta(run_dir: Path) -> Dict[str, object]:
         return json.load(f)
 
 
-def load_state(run_dir: Path, filename: str, nx: int, ny: int) -> np.ndarray:
+def load_state(run_dir: Path, filename: str, nx: int, ny: int, nz: int) -> np.ndarray:
     path = run_dir / filename
     if not path.exists():
         fail(f"missing required file: {path}")
@@ -93,8 +93,14 @@ def load_state(run_dir: Path, filename: str, nx: int, ny: int) -> np.ndarray:
             return arr[None, :, :]
         if arr.shape == (nx, ny):
             return arr.T[None, :, :]
+    if arr.ndim == 4:
+        if arr.shape[1:] == (nz, ny, nx):
+            return arr[:, nz // 2, :, :]
+        if arr.shape[1:] == (nz, nx, ny):
+            return arr[:, nz // 2, :, :].transpose(0, 2, 1)
+        fail(f"4D array shape for {filename} does not match nx/ny/nz from meta: {arr.shape} vs ({nx},{ny},{nz})")
     if arr.ndim != 3:
-        fail(f"expected 3D array for {filename}, got shape {arr.shape}")
+        fail(f"expected 3D/4D array for {filename}, got shape {arr.shape}")
 
     # Accept both [T, ny, nx] and [T, nx, ny]. Normalize to [T, ny, nx].
     if arr.shape[1:] == (ny, nx):
@@ -287,12 +293,13 @@ def main() -> None:
     meta = load_meta(run_dir)
     nx = int(meta.get("nx", 0))
     ny = int(meta.get("ny", 0))
-    if nx <= 0 or ny <= 0:
-        fail("meta.json must contain positive nx and ny")
+    nz = int(meta.get("nz", 1))
+    if nx <= 0 or ny <= 0 or nz <= 0:
+        fail("meta.json must contain positive nx, ny, and nz")
 
     scenario = sanitize_name(str(meta.get("case_name", "default")))
-    pressure = load_state(run_dir, "state_pressure.npy", nx, ny)
-    sw = load_state(run_dir, "state_sw.npy", nx, ny)
+    pressure = load_state(run_dir, "state_pressure.npy", nx, ny, nz)
+    sw = load_state(run_dir, "state_sw.npy", nx, ny, nz)
     well_rates = load_well_rates(run_dir)
     timing_rows = load_timing(run_dir)
     validate_sanity(pressure, sw, well_rates, timing_rows)

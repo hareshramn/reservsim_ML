@@ -52,18 +52,51 @@ python python/ml/train_surrogate.py --data <dir> --config <yaml>
 python python/ml/eval_surrogate.py --checkpoint <ckpt> --case <path> --out <dir>
 ```
 
+## Case Schema Contract (Rock Layering v1)
+
+Case YAML keeps existing required keys and adds optional layered rock keys under `rock`:
+
+- `nz` (integer, optional at top-level):
+  - defaults to `1` when omitted.
+  - when `nz > 1`, simulator runs a 3D Cartesian grid.
+
+- `layer_count` (integer, optional):
+  - if omitted, defaults to homogeneous rock (`1` layer).
+  - if provided with layer lists, must be `> 1`.
+- `layer_porosity` (comma-separated numbers, optional):
+  - list length must equal `layer_count`.
+  - each value must be in `[0, 1]`.
+  - if omitted while layered mode is enabled, scalar `rock.porosity` is used for all layers.
+- `layer_permeability_md` (comma-separated numbers, optional):
+  - list length must equal `layer_count`.
+  - each value must be positive.
+  - if omitted while layered mode is enabled, scalar `rock.permeability_md` is used for all layers.
+
+Layer mapping policy (locked v1):
+- Layering is applied along the `y` axis as horizontal bands.
+- Cell row `y` is mapped by `floor(y * layer_count / ny)`.
+- `layer_count` must not exceed `ny`.
+
 ## Output Schema Contract
 
 Each run writes:
 - `meta.json`
-- `state_pressure.npy` shaped `[T, nx, ny]`
-- `state_sw.npy` shaped `[T, nx, ny]`
+- `state_pressure.npy` shaped:
+  - `[T, ny, nx]` for `nz=1`,
+  - `[T, nz, ny, nx]` for `nz>1`.
+- `state_sw.npy` shaped:
+  - `[T, ny, nx]` for `nz=1`,
+  - `[T, nz, ny, nx]` for `nz>1`.
 - `well_rates.npy` shaped `[T, nwells]`
 - `well_bhp.npy` shaped `[T, nwells]`
 - `timing.csv` with both per-step and aggregate runtime metrics
 
 `meta.json` minimum fields:
-- `case_name`, `nx`, `ny`, `backend`, `dt_policy`, `units`, `version`.
+- `case_name`, `nx`, `ny`, `nz`, `backend`, `dt_policy`, `units`, `version`.
+
+Current backend limitation:
+- GPU path is supported for `nz=1` only.
+- For `nz>1`, use `backend=cpu`.
 
 ## Interface Stability Policy
 

@@ -251,6 +251,8 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
          << "  \"case_name\": \"" << json_escape(cfg.case_name) << "\",\n"
          << "  \"nx\": " << cfg.nx << ",\n"
          << "  \"ny\": " << cfg.ny << ",\n"
+         << "  \"nz\": " << cfg.nz << ",\n"
+         << "  \"rock_layer_count\": " << cfg.rock.layer_count << ",\n"
          << "  \"backend\": \"" << args.backend << "\",\n"
          << "  \"dt_policy\": \"" << json_escape(cfg.dt_policy) << "\",\n"
          << "  \"units\": \"" << json_escape(cfg.units) << "\",\n"
@@ -336,11 +338,21 @@ void write_logs(const OutputContext& ctx, const RunSummary& summary) {
 }
 
 void write_state_outputs(const OutputContext& ctx, const ReservoirState& state, const RunSummary& summary) {
-    const std::vector<size_t> state_shape = {
-        static_cast<size_t>(summary.checkpoint_count),
-        static_cast<size_t>(state.ny),
-        static_cast<size_t>(state.nx),
-    };
+    std::vector<size_t> state_shape;
+    if (state.nz > 1) {
+        state_shape = {
+            static_cast<size_t>(summary.checkpoint_count),
+            static_cast<size_t>(state.nz),
+            static_cast<size_t>(state.ny),
+            static_cast<size_t>(state.nx),
+        };
+    } else {
+        state_shape = {
+            static_cast<size_t>(summary.checkpoint_count),
+            static_cast<size_t>(state.ny),
+            static_cast<size_t>(state.nx),
+        };
+    }
     write_npy_f64(ctx.out_dir / "state_pressure.npy", state_shape, summary.pressure_history);
     write_npy_f64(ctx.out_dir / "state_sw.npy", state_shape, summary.sw_history);
 }
@@ -474,10 +486,14 @@ std::pair<std::vector<double>, std::vector<double>> compute_well_step_metrics(
     if (!cfg.wells.enabled) {
         return {rates, bhp};
     }
-    const size_t injector_idx = static_cast<size_t>(cfg.wells.injector_cell_y) * static_cast<size_t>(cfg.nx) +
-                                static_cast<size_t>(cfg.wells.injector_cell_x);
-    const size_t producer_idx = static_cast<size_t>(cfg.wells.producer_cell_y) * static_cast<size_t>(cfg.nx) +
-                                static_cast<size_t>(cfg.wells.producer_cell_x);
+    const size_t injector_idx =
+        (static_cast<size_t>(cfg.wells.injector_cell_z) * static_cast<size_t>(cfg.ny) + static_cast<size_t>(cfg.wells.injector_cell_y)) *
+            static_cast<size_t>(cfg.nx) +
+        static_cast<size_t>(cfg.wells.injector_cell_x);
+    const size_t producer_idx =
+        (static_cast<size_t>(cfg.wells.producer_cell_z) * static_cast<size_t>(cfg.ny) + static_cast<size_t>(cfg.wells.producer_cell_y)) *
+            static_cast<size_t>(cfg.nx) +
+        static_cast<size_t>(cfg.wells.producer_cell_x);
 
     const double q_inj = kWellRateScale * cfg.wells.injector_rate_stb_day;
     const double drawdown = std::max(state.pressure[producer_idx] - cfg.wells.producer_bhp_psi, 0.0);
@@ -584,7 +600,7 @@ RunSummary execute_time_loop(
     int output_every,
     const std::string& backend) {
     RunSummary summary;
-    const size_t cells_per_state = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny);
+    const size_t cells_per_state = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny) * static_cast<size_t>(state.nz);
     const int progress_every = std::max(1, ctx.steps_to_run / 100); // ~1% cadence
 
     for (int step = 0; step < ctx.steps_to_run; ++step) {
@@ -656,6 +672,13 @@ RunSummary execute_time_loop(
 int main(int argc, char** argv) {
     try {
         const Args args = parse_args(argc, argv);
+        const SimulationConfig cfg = load_simulation_config(args.case_path);
+        if (args.backend == "gpu" && cfg.nz > 1) {
+            emit_and_exit(
+                ExitCode::E_ARG_INVALID,
+                "E_ARG_INVALID",
+                "backend=gpu currently supports only nz=1. Use backend=cpu for 3D runs.");
+        }
         if (args.backend == "gpu" && !gpu_transport_enabled()) {
             emit_and_exit(
                 ExitCode::E_ARG_INVALID,
@@ -668,7 +691,6 @@ int main(int argc, char** argv) {
                 "E_ARG_INVALID",
                 "backend=gpu requested but CUDA pressure backend is not enabled/available.");
         }
-        const SimulationConfig cfg = load_simulation_config(args.case_path);
         const OutputContext ctx = prepare_output_context(args, cfg.schedule_end_step);
         ReservoirState state = initialize_state(cfg);
         validate_state_invariants(state);

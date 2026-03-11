@@ -88,8 +88,10 @@ def main() -> int:
     sw = np.load(run_dir / "state_sw.npy")
     if p.shape != sw.shape:
         errors.append(f"state shape mismatch: pressure={p.shape} sw={sw.shape}")
-    if p.ndim != 3:
-        errors.append(f"state arrays expected ndim=3, got pressure ndim={p.ndim}")
+    if p.ndim not in (3, 4):
+        errors.append(f"state arrays expected ndim=3 or 4, got pressure ndim={p.ndim}")
+    if p.ndim == 4 and "nz" not in meta:
+        errors.append("meta missing key: nz for 3D state arrays")
 
     if errors:
         for e in errors:

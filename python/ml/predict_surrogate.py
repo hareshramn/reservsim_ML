@@ -72,8 +72,11 @@ def load_from_run(run_dir: Path, step_idx: int) -> Tuple[np.ndarray, np.ndarray,
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     pressure = np.load(p_path)
     sw = np.load(sw_path)
+    if pressure.ndim == 4 and sw.ndim == 4:
+        pressure = pressure[:, pressure.shape[1] // 2, :, :]
+        sw = sw[:, sw.shape[1] // 2, :, :]
     if pressure.ndim != 3 or sw.ndim != 3:
-        fail("run arrays must be 3D [T, ny, nx] or [T, nx, ny]")
+        fail("run arrays must be 3D/4D [T, ny, nx] or [T, nx, ny] (4D uses middle-z slice)")
     if pressure.shape != sw.shape:
         fail(f"pressure/sw shape mismatch in run: {pressure.shape} vs {sw.shape}")
     if step_idx < 0 or step_idx >= pressure.shape[0]:

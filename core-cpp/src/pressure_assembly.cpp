@@ -11,18 +11,19 @@ namespace {
     throw CliError(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", message);
 }
 
-size_t cell_index(int x, int y, int nx) {
-    return static_cast<size_t>(y) * static_cast<size_t>(nx) + static_cast<size_t>(x);
+size_t cell_index(int x, int y, int z, int nx, int ny) {
+    return (static_cast<size_t>(z) * static_cast<size_t>(ny) + static_cast<size_t>(y)) * static_cast<size_t>(nx) + static_cast<size_t>(x);
 }
 
 void validate_system_shape(const PressureSystem& system) {
-    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny);
-    if (system.nx <= 0 || system.ny <= 0) {
+    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny) * static_cast<size_t>(system.nz);
+    if (system.nx <= 0 || system.ny <= 0 || system.nz <= 0) {
         fail("pressure system dimensions must be positive.");
     }
     if (system.diag.size() != count || system.west.size() != count || system.east.size() != count ||
-        system.south.size() != count || system.north.size() != count || system.rhs.size() != count) {
-        fail("pressure system arrays must match nx * ny.");
+        system.south.size() != count || system.north.size() != count || system.down.size() != count || system.up.size() != count ||
+        system.rhs.size() != count) {
+        fail("pressure system arrays must match nx * ny * nz.");
     }
 }
 
@@ -76,19 +77,22 @@ constexpr double kWellRateScale = 1.0e-3;
 
 PressureSystem assemble_pressure_system(const SimulationConfig& cfg, const ReservoirState& state) {
     validate_state_invariants(state);
-    if (state.nx != cfg.nx || state.ny != cfg.ny) {
+    if (state.nx != cfg.nx || state.ny != cfg.ny || state.nz != cfg.nz) {
         fail("state dimensions must match configuration.");
     }
 
-    const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny);
+    const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny) * static_cast<size_t>(cfg.nz);
     PressureSystem system;
     system.nx = cfg.nx;
     system.ny = cfg.ny;
+    system.nz = cfg.nz;
     system.diag.assign(count, 0.0);
     system.west.assign(count, 0.0);
     system.east.assign(count, 0.0);
     system.south.assign(count, 0.0);
     system.north.assign(count, 0.0);
+    system.down.assign(count, 0.0);
+    system.up.assign(count, 0.0);
     system.rhs.assign(count, 0.0);
 
     std::vector<double> lambda_t(count, 0.0);
@@ -99,35 +103,49 @@ PressureSystem assemble_pressure_system(const SimulationConfig& cfg, const Reser
         }
     }
 
-    for (int y = 0; y < cfg.ny; ++y) {
-        for (int x = 0; x < cfg.nx; ++x) {
-            const size_t i = cell_index(x, y, cfg.nx);
+    for (int z = 0; z < cfg.nz; ++z) {
+        for (int y = 0; y < cfg.ny; ++y) {
+            for (int x = 0; x < cfg.nx; ++x) {
+                const size_t i = cell_index(x, y, z, cfg.nx, cfg.ny);
 
-            if (x + 1 < cfg.nx) {
-                const size_t j = cell_index(x + 1, y, cfg.nx);
-                const double t = face_transmissibility(
-                    state.permeability_md[i], state.permeability_md[j], lambda_t[i], lambda_t[j]);
-                system.diag[i] += t;
-                system.diag[j] += t;
-                system.east[i] = -t;
-                system.west[j] = -t;
-            }
+                if (x + 1 < cfg.nx) {
+                    const size_t j = cell_index(x + 1, y, z, cfg.nx, cfg.ny);
+                    const double t = face_transmissibility(
+                        state.permeability_md[i], state.permeability_md[j], lambda_t[i], lambda_t[j]);
+                    system.diag[i] += t;
+                    system.diag[j] += t;
+                    system.east[i] = -t;
+                    system.west[j] = -t;
+                }
 
-            if (y + 1 < cfg.ny) {
-                const size_t j = cell_index(x, y + 1, cfg.nx);
-                const double t = face_transmissibility(
-                    state.permeability_md[i], state.permeability_md[j], lambda_t[i], lambda_t[j]);
-                system.diag[i] += t;
-                system.diag[j] += t;
-                system.north[i] = -t;
-                system.south[j] = -t;
+                if (y + 1 < cfg.ny) {
+                    const size_t j = cell_index(x, y + 1, z, cfg.nx, cfg.ny);
+                    const double t = face_transmissibility(
+                        state.permeability_md[i], state.permeability_md[j], lambda_t[i], lambda_t[j]);
+                    system.diag[i] += t;
+                    system.diag[j] += t;
+                    system.north[i] = -t;
+                    system.south[j] = -t;
+                }
+
+                if (z + 1 < cfg.nz) {
+                    const size_t j = cell_index(x, y, z + 1, cfg.nx, cfg.ny);
+                    const double t = face_transmissibility(
+                        state.permeability_md[i], state.permeability_md[j], lambda_t[i], lambda_t[j]);
+                    system.diag[i] += t;
+                    system.diag[j] += t;
+                    system.up[i] = -t;
+                    system.down[j] = -t;
+                }
             }
         }
     }
 
     if (cfg.wells.enabled) {
-        const size_t injector_idx = cell_index(cfg.wells.injector_cell_x, cfg.wells.injector_cell_y, cfg.nx);
-        const size_t producer_idx = cell_index(cfg.wells.producer_cell_x, cfg.wells.producer_cell_y, cfg.nx);
+        const size_t injector_idx = cell_index(
+            cfg.wells.injector_cell_x, cfg.wells.injector_cell_y, cfg.wells.injector_cell_z, cfg.nx, cfg.ny);
+        const size_t producer_idx = cell_index(
+            cfg.wells.producer_cell_x, cfg.wells.producer_cell_y, cfg.wells.producer_cell_z, cfg.nx, cfg.ny);
 
         const double q_inj = kWellRateScale * cfg.wells.injector_rate_stb_day;
         const double pi = kWellRateScale * cfg.wells.producer_pi;
@@ -141,29 +159,37 @@ PressureSystem assemble_pressure_system(const SimulationConfig& cfg, const Reser
 
 std::vector<double> apply_pressure_system(const PressureSystem& system, const std::vector<double>& x) {
     validate_system_shape(system);
-    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny);
+    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny) * static_cast<size_t>(system.nz);
     if (x.size() != count) {
         fail("pressure system apply input must match system size.");
     }
 
     std::vector<double> y(count, 0.0);
-    for (int y_idx = 0; y_idx < system.ny; ++y_idx) {
-        for (int x_idx = 0; x_idx < system.nx; ++x_idx) {
-            const size_t i = cell_index(x_idx, y_idx, system.nx);
-            double value = system.diag[i] * x[i];
-            if (x_idx > 0) {
-                value += system.west[i] * x[cell_index(x_idx - 1, y_idx, system.nx)];
+    for (int z_idx = 0; z_idx < system.nz; ++z_idx) {
+        for (int y_idx = 0; y_idx < system.ny; ++y_idx) {
+            for (int x_idx = 0; x_idx < system.nx; ++x_idx) {
+                const size_t i = cell_index(x_idx, y_idx, z_idx, system.nx, system.ny);
+                double value = system.diag[i] * x[i];
+                if (x_idx > 0) {
+                    value += system.west[i] * x[cell_index(x_idx - 1, y_idx, z_idx, system.nx, system.ny)];
+                }
+                if (x_idx + 1 < system.nx) {
+                    value += system.east[i] * x[cell_index(x_idx + 1, y_idx, z_idx, system.nx, system.ny)];
+                }
+                if (y_idx > 0) {
+                    value += system.south[i] * x[cell_index(x_idx, y_idx - 1, z_idx, system.nx, system.ny)];
+                }
+                if (y_idx + 1 < system.ny) {
+                    value += system.north[i] * x[cell_index(x_idx, y_idx + 1, z_idx, system.nx, system.ny)];
+                }
+                if (z_idx > 0) {
+                    value += system.down[i] * x[cell_index(x_idx, y_idx, z_idx - 1, system.nx, system.ny)];
+                }
+                if (z_idx + 1 < system.nz) {
+                    value += system.up[i] * x[cell_index(x_idx, y_idx, z_idx + 1, system.nx, system.ny)];
+                }
+                y[i] = value;
             }
-            if (x_idx + 1 < system.nx) {
-                value += system.east[i] * x[cell_index(x_idx + 1, y_idx, system.nx)];
-            }
-            if (y_idx > 0) {
-                value += system.south[i] * x[cell_index(x_idx, y_idx - 1, system.nx)];
-            }
-            if (y_idx + 1 < system.ny) {
-                value += system.north[i] * x[cell_index(x_idx, y_idx + 1, system.nx)];
-            }
-            y[i] = value;
         }
     }
     return y;
@@ -171,34 +197,47 @@ std::vector<double> apply_pressure_system(const PressureSystem& system, const st
 
 void apply_pressure_gauge(PressureSystem& system, int gauge_cell, double gauge_value) {
     validate_system_shape(system);
-    const int count = system.nx * system.ny;
+    const int cells_per_layer = system.nx * system.ny;
+    const int count = cells_per_layer * system.nz;
     if (gauge_cell < 0 || gauge_cell >= count) {
         fail("pressure gauge cell index is out of range.");
     }
 
-    const int gauge_x = gauge_cell % system.nx;
-    const int gauge_y = gauge_cell / system.nx;
+    const int gauge_z = gauge_cell / cells_per_layer;
+    const int rem = gauge_cell % cells_per_layer;
+    const int gauge_y = rem / system.nx;
+    const int gauge_x = rem % system.nx;
     const size_t g = static_cast<size_t>(gauge_cell);
 
     if (gauge_x > 0) {
-        const size_t west_idx = cell_index(gauge_x - 1, gauge_y, system.nx);
+        const size_t west_idx = cell_index(gauge_x - 1, gauge_y, gauge_z, system.nx, system.ny);
         system.rhs[west_idx] -= system.east[west_idx] * gauge_value;
         system.east[west_idx] = 0.0;
     }
     if (gauge_x + 1 < system.nx) {
-        const size_t east_idx = cell_index(gauge_x + 1, gauge_y, system.nx);
+        const size_t east_idx = cell_index(gauge_x + 1, gauge_y, gauge_z, system.nx, system.ny);
         system.rhs[east_idx] -= system.west[east_idx] * gauge_value;
         system.west[east_idx] = 0.0;
     }
     if (gauge_y > 0) {
-        const size_t south_idx = cell_index(gauge_x, gauge_y - 1, system.nx);
+        const size_t south_idx = cell_index(gauge_x, gauge_y - 1, gauge_z, system.nx, system.ny);
         system.rhs[south_idx] -= system.north[south_idx] * gauge_value;
         system.north[south_idx] = 0.0;
     }
     if (gauge_y + 1 < system.ny) {
-        const size_t north_idx = cell_index(gauge_x, gauge_y + 1, system.nx);
+        const size_t north_idx = cell_index(gauge_x, gauge_y + 1, gauge_z, system.nx, system.ny);
         system.rhs[north_idx] -= system.south[north_idx] * gauge_value;
         system.south[north_idx] = 0.0;
+    }
+    if (gauge_z > 0) {
+        const size_t down_idx = cell_index(gauge_x, gauge_y, gauge_z - 1, system.nx, system.ny);
+        system.rhs[down_idx] -= system.up[down_idx] * gauge_value;
+        system.up[down_idx] = 0.0;
+    }
+    if (gauge_z + 1 < system.nz) {
+        const size_t up_idx = cell_index(gauge_x, gauge_y, gauge_z + 1, system.nx, system.ny);
+        system.rhs[up_idx] -= system.down[up_idx] * gauge_value;
+        system.down[up_idx] = 0.0;
     }
 
     system.diag[g] = 1.0;
@@ -206,6 +245,8 @@ void apply_pressure_gauge(PressureSystem& system, int gauge_cell, double gauge_v
     system.east[g] = 0.0;
     system.south[g] = 0.0;
     system.north[g] = 0.0;
+    system.down[g] = 0.0;
+    system.up[g] = 0.0;
     system.rhs[g] = gauge_value;
 }
 
@@ -215,7 +256,7 @@ PressureSolveResult solve_pressure_cg_jacobi(
     double relative_tolerance,
     int max_iterations) {
     validate_system_shape(system);
-    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny);
+    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny) * static_cast<size_t>(system.nz);
     if (initial_guess.size() != count) {
         fail("pressure solver initial guess must match system size.");
     }

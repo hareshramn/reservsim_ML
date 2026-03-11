@@ -9,6 +9,7 @@
 struct ReservoirState {
     int nx = 0;
     int ny = 0;
+    int nz = 1;
     std::vector<double> pressure;
     std::vector<double> sw;
     std::vector<double> porosity;
@@ -17,4 +18,3 @@ struct ReservoirState {
 
 ReservoirState initialize_state(const SimulationConfig& cfg);
 void validate_state_invariants(const ReservoirState& state);
-

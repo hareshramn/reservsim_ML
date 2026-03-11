@@ -21,6 +21,15 @@ std::string fixture_case_path() {
     return std::string(root) + "/core-cpp/tests/fixtures/valid_case.yaml";
 }
 
+std::string fixture_layered_case_path() {
+    const char* root = std::getenv("RESERV_ML_REPO_ROOT");
+    if (root == nullptr) {
+        std::cerr << "RESERV_ML_REPO_ROOT not set\n";
+        std::exit(1);
+    }
+    return std::string(root) + "/core-cpp/tests/fixtures/layered_case.yaml";
+}
+
 std::string shell_quote(const std::string& raw) {
     std::string out;
     out.reserve(raw.size() + 2);
@@ -225,6 +234,33 @@ void test_step_acceptance_failure_emits_json_error(const fs::path& build_dir) {
     fs::remove(err_path, ec);
 }
 
+void test_3d_case_writes_rank4_state_arrays(const fs::path& build_dir) {
+    const fs::path sim_run = build_dir / "sim_run";
+    expect_true(fs::exists(sim_run), "sim_run executable exists");
+
+    const fs::path out_dir = fs::temp_directory_path() / "reserv_ml_sim_run_contract_3d_case";
+    std::error_code ec;
+    fs::remove_all(out_dir, ec);
+    fs::create_directories(out_dir, ec);
+    expect_true(!ec, "create output directory");
+
+    const std::string cmd =
+        shell_quote(sim_run.string()) +
+        " --case " + shell_quote(fixture_layered_case_path()) +
+        " --backend cpu --steps 4 --output-every 2 --out " + shell_quote(out_dir.string()) +
+        " > /dev/null 2>&1";
+    expect_true(command_exit_code(run_command(cmd)) == 0, "3d sim_run returns success");
+
+    const std::vector<int> pressure_shape = parse_npy_shape(out_dir / "state_pressure.npy");
+    expect_true(pressure_shape.size() == 4, "3d state_pressure rank-4");
+    expect_true(pressure_shape[0] == 2, "3d checkpoint count");
+    expect_true(pressure_shape[1] == 3, "3d nz shape");
+    expect_true(pressure_shape[2] == 6, "3d ny shape");
+    expect_true(pressure_shape[3] == 8, "3d nx shape");
+
+    fs::remove_all(out_dir, ec);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -233,6 +269,7 @@ int main(int argc, char** argv) {
     test_output_every_and_schema(build_dir);
     test_output_every_larger_than_steps_writes_final_checkpoint(build_dir);
     test_step_acceptance_failure_emits_json_error(build_dir);
+    test_3d_case_writes_rank4_state_arrays(build_dir);
     std::cout << "sim_run_contract_tests: PASS\n";
     return 0;
 }

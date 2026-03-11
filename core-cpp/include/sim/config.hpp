@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 struct PhysicsConfig {
     std::string phases;
@@ -12,6 +13,9 @@ struct PhysicsConfig {
 struct RockConfig {
     double porosity = 0.0;
     double permeability_md = 0.0;
+    int layer_count = 1;
+    std::vector<double> layer_porosity;
+    std::vector<double> layer_permeability_md;
 };
 
 struct FluidConfig {
@@ -27,9 +31,11 @@ struct WellsConfig {
     bool enabled = false;
     int injector_cell_x = 0;
     int injector_cell_y = 0;
+    int injector_cell_z = 0;
     double injector_rate_stb_day = 0.0;
     int producer_cell_x = 0;
     int producer_cell_y = 0;
+    int producer_cell_z = 0;
     double producer_bhp_psi = 0.0;
     double producer_pi = 1.0;
 };
@@ -38,6 +44,7 @@ struct SimulationConfig {
     std::string case_name;
     int nx = 0;
     int ny = 0;
+    int nz = 1;
     std::string dt_policy;
     std::string units;
     int schedule_end_step = 0;

@@ -17,6 +17,12 @@
   - `benchmark`
   - `ml-data`
 
+State array shape contract:
+- `state_pressure.npy` and `state_sw.npy` use:
+  - `[T, ny, nx]` for 2D (`nz=1`),
+  - `[T, nz, ny, nx]` for 3D (`nz>1`).
+- `meta.json` must include `nz`.
+
 ## CSV Schemas
 
 ### `benchmarks/benchmark_summary.csv`

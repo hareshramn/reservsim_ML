@@ -30,8 +30,13 @@ void expect_true(bool ok, const std::string& msg) {
 double apply_row(const PressureSystem& system, const std::vector<double>& x, int cell) {
     const int nx = system.nx;
     const int ny = system.ny;
-    const int cx = cell % nx;
-    const int cy = cell / nx;
+    const int nz = system.nz;
+    const int cells_per_layer = nx * ny;
+    (void)nz;
+    const int cz = cell / cells_per_layer;
+    const int rem = cell % cells_per_layer;
+    const int cy = rem / nx;
+    const int cx = rem % nx;
 
     double value = system.diag[static_cast<size_t>(cell)] * x[static_cast<size_t>(cell)];
     if (cx > 0) {
@@ -46,6 +51,12 @@ double apply_row(const PressureSystem& system, const std::vector<double>& x, int
     if (cy + 1 < ny) {
         value += system.north[static_cast<size_t>(cell)] * x[static_cast<size_t>(cell + nx)];
     }
+    if (cz > 0) {
+        value += system.down[static_cast<size_t>(cell)] * x[static_cast<size_t>(cell - cells_per_layer)];
+    }
+    if (cz + 1 < system.nz) {
+        value += system.up[static_cast<size_t>(cell)] * x[static_cast<size_t>(cell + cells_per_layer)];
+    }
     return value;
 }
 
@@ -54,7 +65,7 @@ void test_pressure_system_sign_structure() {
     const ReservoirState state = initialize_state(cfg);
     const PressureSystem system = assemble_pressure_system(cfg, state);
 
-    const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny);
+    const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny) * static_cast<size_t>(cfg.nz);
     expect_true(system.diag.size() == count, "diag size");
     expect_true(system.rhs.size() == count, "rhs size");
 
@@ -64,6 +75,8 @@ void test_pressure_system_sign_structure() {
         expect_true(system.east[i] <= 0.0, "east nonpositive");
         expect_true(system.south[i] <= 0.0, "south nonpositive");
         expect_true(system.north[i] <= 0.0, "north nonpositive");
+        expect_true(system.down[i] <= 0.0, "down nonpositive");
+        expect_true(system.up[i] <= 0.0, "up nonpositive");
         expect_true(std::abs(system.rhs[i]) < 1.0e-12, "rhs zero for closed box");
     }
 }

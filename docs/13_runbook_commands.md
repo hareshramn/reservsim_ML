@@ -22,12 +22,18 @@ tools/model_run.sh --model-dir <dir> --backend cpu|gpu --steps <N> --output-ever
 
 Expected behavior:
 - Parse case config.
+- Accept optional top-level `nz` (default `1`) for 3D runs.
+- Accept optional layered-rock fields in case YAML:
+  - `rock.layer_count`,
+  - `rock.layer_porosity`,
+  - `rock.layer_permeability_md`.
 - Run until `min(N, schedule_end_step)`.
 - Persist schema-defined arrays and metadata.
 - Emit `timing.csv`.
 - If `--out auto`, place the run under the selected purpose bucket.
 - Purpose bucket is selected by caller contract (`workflow run`=adhoc, `workflow ml-data-gen`=ml-data, `workflow bench`=benchmark).
 - If `--case-file` is provided, that case YAML is used for the run instead of `<model-dir>/model.yaml`.
+- If `nz>1`, run with `--backend cpu` (current GPU path is `nz=1` only).
 - On error, exit with stable code and emit one-line JSON on `stderr`:
   - `2` (`E_ARG_MISSING`), `3` (`E_ARG_INVALID`), `4` (`E_CASE_PARSE`), `5` (`E_CASE_SCHEMA`), `6` (`E_IO`).
 

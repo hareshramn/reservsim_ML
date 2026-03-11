@@ -8,11 +8,14 @@
 struct PressureSystem {
     int nx = 0;
     int ny = 0;
+    int nz = 1;
     std::vector<double> diag;
     std::vector<double> west;
     std::vector<double> east;
     std::vector<double> south;
     std::vector<double> north;
+    std::vector<double> down;
+    std::vector<double> up;
     std::vector<double> rhs;
 };
 

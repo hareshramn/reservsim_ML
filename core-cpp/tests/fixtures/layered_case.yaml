@@ -1,0 +1,25 @@
+case_name: "fixture_layered"
+nx: 8
+ny: 6
+nz: 3
+dt_policy: "cfl_adaptive_v1"
+units: "field"
+schedule_end_step: 12
+physics:
+  phases: "oil_water"
+  incompressible: true
+  gravity: false
+  capillary: false
+rock:
+  porosity: 0.22
+  permeability_md: 150.0
+  layer_count: 3
+  layer_porosity: 0.18, 0.22, 0.26
+  layer_permeability_md: 50.0, 150.0, 400.0
+fluid:
+  mu_w_cp: 1.2
+  mu_o_cp: 2.7
+  swc: 0.15
+  sor: 0.2
+  nw: 2.1
+  no: 2.3

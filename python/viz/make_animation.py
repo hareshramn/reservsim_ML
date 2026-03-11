@@ -55,14 +55,20 @@ def load_meta(run_dir: Path) -> dict:
         return json.load(f)
 
 
-def load_state(run_dir: Path, field: str, nx: int, ny: int) -> np.ndarray:
+def load_state(run_dir: Path, field: str, nx: int, ny: int, nz: int) -> np.ndarray:
     filename = "state_pressure.npy" if field == "pressure" else "state_sw.npy"
     path = run_dir / filename
     if not path.exists():
         fail(f"missing required file: {path}")
     arr = np.load(path)
+    if arr.ndim == 4:
+        if arr.shape[1:] == (nz, ny, nx):
+            return arr[:, nz // 2, :, :]
+        if arr.shape[1:] == (nz, nx, ny):
+            return arr[:, nz // 2, :, :].transpose(0, 2, 1)
+        fail(f"array shape for {filename} does not match meta nx/ny/nz: {arr.shape} vs ({nx},{ny},{nz})")
     if arr.ndim != 3:
-        fail(f"expected 3D array for {filename}, got shape {arr.shape}")
+        fail(f"expected 3D/4D array for {filename}, got shape {arr.shape}")
     if arr.shape[1:] == (ny, nx):
         return arr
     if arr.shape[1:] == (nx, ny):
@@ -134,11 +140,12 @@ def main() -> None:
     meta = load_meta(run_dir)
     nx = int(meta.get("nx", 0))
     ny = int(meta.get("ny", 0))
-    if nx <= 0 or ny <= 0:
-        fail("meta.json must contain positive nx and ny")
+    nz = int(meta.get("nz", 1))
+    if nx <= 0 or ny <= 0 or nz <= 0:
+        fail("meta.json must contain positive nx, ny, and nz")
 
     scenario = sanitize_name(str(meta.get("case_name", "default")))
-    state = load_state(run_dir, args.field, nx, ny)
+    state = load_state(run_dir, args.field, nx, ny, nz)
     out_path = resolve_out_path(args.out, run_dir, args.field, scenario)
     final_path = build_animation(state, args.field, out_path, args.fps)
     print(f"Generated animation: {final_path}")

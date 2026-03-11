@@ -57,7 +57,7 @@ double fractional_flow_water_host(const SimulationConfig& cfg, double sw) {
 }
 
 double total_water_mass(const ReservoirState& state) {
-    const size_t count = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny);
+    const size_t count = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny) * static_cast<size_t>(state.nz);
     double mass = 0.0;
     for (size_t i = 0; i < count; ++i) {
         mass += state.porosity[i] * state.sw[i];
@@ -363,8 +363,11 @@ __global__ void update_saturation_kernel(
 
 TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig& cfg, ReservoirState& state, double dt_days) {
     validate_state_invariants(state);
-    if (state.nx != cfg.nx || state.ny != cfg.ny) {
+    if (state.nx != cfg.nx || state.ny != cfg.ny || state.nz != cfg.nz) {
         fail("state dimensions must match configuration.");
+    }
+    if (cfg.nz != 1) {
+        fail("GPU transport backend currently supports only nz=1.");
     }
     if (!(dt_days > 0.0) || !std::isfinite(dt_days)) {
         fail("transport dt_days must be finite and positive.");
