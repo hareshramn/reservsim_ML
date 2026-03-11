@@ -1197,11 +1197,31 @@ def list_visual_artifacts(run_dir: Path) -> list[dict[str, str]]:
 
 
 def build_visuals_page(run_dir: Path) -> str:
+    meta: dict[str, object] = {}
+    meta_path = run_dir / "meta.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            meta = {}
+    nx = int(_float(meta.get("nx"), 0.0))
+    ny = int(_float(meta.get("ny"), 0.0))
+    nz = int(_float(meta.get("nz"), 0.0))
+    if nz > 1:
+        dim_msg = f"Detected volumetric run: nx={nx}, ny={ny}, nz={nz}. 3D slice visuals are expected."
+        dim_style = "background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46"
+    else:
+        dim_msg = (
+            "Detected legacy 2D run metadata (missing nz or nz<=1). "
+            "This run will only show 2D maps. Rebuild and re-run model2 to generate 3D outputs."
+        )
+        dim_style = "background:#fff7ed;border:1px solid #fed7aa;color:#9a3412"
+
     visuals = list_visual_artifacts(run_dir)
     cards: list[str] = []
     for v in visuals:
         # Hide performance figures for now.
-        if re.match(r"^fig_0[4-6]_", v["name"]):
+        if any(tok in v["name"] for tok in ("runtime_bar", "kernel_breakdown", "speedup_bar")):
             continue
         src = f"/api/file?path={quote(v['path'])}"
         safe_name = html.escape(v["name"])
@@ -1241,6 +1261,7 @@ def build_visuals_page(run_dir: Path) -> str:
   <div style="max-width:1200px;margin:20px auto;padding:0 12px">
     <h1 style="margin:0 0 6px 0">Visual Outputs</h1>
     <div style="font-family:ui-monospace,Consolas,monospace;font-size:12px;margin-bottom:12px;word-break:break-all">{safe_run}</div>
+    <div style="padding:10px 12px;border-radius:10px;margin:0 0 12px 0;{dim_style}">{html.escape(dim_msg)}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">{cards_html}</div>
   </div>
   <div id="lightbox" onclick="closeLightbox()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px">

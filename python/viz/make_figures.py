@@ -9,7 +9,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 
@@ -95,9 +95,9 @@ def load_state(run_dir: Path, filename: str, nx: int, ny: int, nz: int) -> np.nd
             return arr.T[None, :, :]
     if arr.ndim == 4:
         if arr.shape[1:] == (nz, ny, nx):
-            return arr[:, nz // 2, :, :]
+            return arr
         if arr.shape[1:] == (nz, nx, ny):
-            return arr[:, nz // 2, :, :].transpose(0, 2, 1)
+            return arr.transpose(0, 1, 3, 2)
         fail(f"4D array shape for {filename} does not match nx/ny/nz from meta: {arr.shape} vs ({nx},{ny},{nz})")
     if arr.ndim != 3:
         fail(f"expected 3D/4D array for {filename}, got shape {arr.shape}")
@@ -156,6 +156,64 @@ def plot_snapshots(data: np.ndarray, title_prefix: str, cmap: str, out_path: Pat
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
+def choose_z_slices(nz: int) -> List[int]:
+    if nz <= 1:
+        return [0]
+    return sorted({0, nz // 2, nz - 1})
+
+
+def plot_snapshots_3d(data: np.ndarray, title_prefix: str, cmap: str, out_path: Path) -> None:
+    # data shape: [T, nz, ny, nx]
+    plt = import_matplotlib_pyplot()
+    steps = choose_snapshot_steps(data.shape[0])
+    z_slices = choose_z_slices(data.shape[1])
+    fig, axes = plt.subplots(
+        len(steps),
+        len(z_slices),
+        figsize=(4.5 * len(z_slices), 3.6 * len(steps)),
+        constrained_layout=True,
+    )
+    if len(steps) == 1:
+        axes = np.array([axes])
+    if len(z_slices) == 1:
+        axes = axes[:, None]
+
+    for r, step in enumerate(steps):
+        for c, z_idx in enumerate(z_slices):
+            ax = axes[r, c]
+            field = data[step, z_idx, :, :]
+            im = ax.imshow(field, origin="lower", cmap=cmap, aspect="auto")
+            ax.set_title(f"{title_prefix} t={step:03d} z={z_idx}")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
+def plot_depth_profile(sw: np.ndarray, pressure: np.ndarray, out_path: Path) -> None:
+    # sw/pressure shape: [T, nz, ny, nx]
+    plt = import_matplotlib_pyplot()
+    z_axis = np.arange(sw.shape[1], dtype=int)
+    sw_profile = sw[-1].mean(axis=(1, 2))
+    p_profile = pressure[-1].mean(axis=(1, 2))
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.5, 7), sharex=True, constrained_layout=True)
+    ax1.plot(z_axis, sw_profile, marker="o", linewidth=1.8, color="tab:blue")
+    ax1.set_ylabel("avg sw [-]")
+    ax1.grid(alpha=0.3)
+    ax1.set_title("Final-Step Depth Profiles")
+
+    ax2.plot(z_axis, p_profile, marker="o", linewidth=1.8, color="tab:red")
+    ax2.set_xlabel("z index")
+    ax2.set_ylabel("avg pressure")
+    ax2.grid(alpha=0.3)
 
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
@@ -270,6 +328,8 @@ def validate_sanity(pressure: np.ndarray, sw: np.ndarray, well_rates: np.ndarray
     if not np.isfinite(sw).all():
         fail("state_sw.npy contains non-finite values")
 
+    if pressure.ndim not in (3, 4):
+        fail(f"state arrays must be 3D or 4D, got ndim={pressure.ndim}")
     t_count = pressure.shape[0]
     if well_rates.shape[0] not in (1, t_count):
         fail(
@@ -311,15 +371,29 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     timing_agg = aggregate_timing(timing_rows)
 
-    plot_snapshots(pressure, "Pressure", "viridis", figure_path(out_dir, 1, "pressure_snapshot", scenario))
-    plot_snapshots(sw, "Water Saturation", "Blues", figure_path(out_dir, 2, "sw_front", scenario))
-    plot_timeseries(sw, pressure, well_rates, figure_path(out_dir, 3, "timeseries_watercut_pressure", scenario))
-    plot_performance(
-        timing_agg,
-        out_runtime=figure_path(out_dir, 4, "runtime_bar", scenario),
-        out_breakdown=figure_path(out_dir, 5, "kernel_breakdown", scenario),
-        out_speedup=figure_path(out_dir, 6, "speedup_bar", scenario),
-    )
+    if pressure.ndim == 4:
+        plot_snapshots_3d(pressure, "Pressure", "viridis", figure_path(out_dir, 1, "pressure_slices_3d", scenario))
+        plot_snapshots_3d(sw, "Water Saturation", "Blues", figure_path(out_dir, 2, "sw_slices_3d", scenario))
+        pressure_mid = pressure[:, pressure.shape[1] // 2, :, :]
+        sw_mid = sw[:, sw.shape[1] // 2, :, :]
+        plot_timeseries(sw_mid, pressure_mid, well_rates, figure_path(out_dir, 3, "timeseries_watercut_pressure", scenario))
+        plot_depth_profile(sw, pressure, figure_path(out_dir, 4, "depth_profile", scenario))
+        plot_performance(
+            timing_agg,
+            out_runtime=figure_path(out_dir, 5, "runtime_bar", scenario),
+            out_breakdown=figure_path(out_dir, 6, "kernel_breakdown", scenario),
+            out_speedup=figure_path(out_dir, 7, "speedup_bar", scenario),
+        )
+    else:
+        plot_snapshots(pressure, "Pressure", "viridis", figure_path(out_dir, 1, "pressure_snapshot", scenario))
+        plot_snapshots(sw, "Water Saturation", "Blues", figure_path(out_dir, 2, "sw_front", scenario))
+        plot_timeseries(sw, pressure, well_rates, figure_path(out_dir, 3, "timeseries_watercut_pressure", scenario))
+        plot_performance(
+            timing_agg,
+            out_runtime=figure_path(out_dir, 4, "runtime_bar", scenario),
+            out_breakdown=figure_path(out_dir, 5, "kernel_breakdown", scenario),
+            out_speedup=figure_path(out_dir, 6, "speedup_bar", scenario),
+        )
 
     print(f"Generated figures in: {out_dir}")
     print(f"Run source: {run_dir}")

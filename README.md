@@ -94,6 +94,18 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 
 ## Workflow Paths
 
+Recommended for most users (web app entrypoint from repo root):
+
+```bash
+./webui
+```
+
+Advanced users (full CLI):
+
+```bash
+./workflow --help
+```
+
 Manual path (single entry point from repo root):
 
 ```bash

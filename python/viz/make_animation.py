@@ -63,9 +63,9 @@ def load_state(run_dir: Path, field: str, nx: int, ny: int, nz: int) -> np.ndarr
     arr = np.load(path)
     if arr.ndim == 4:
         if arr.shape[1:] == (nz, ny, nx):
-            return arr[:, nz // 2, :, :]
+            return arr
         if arr.shape[1:] == (nz, nx, ny):
-            return arr[:, nz // 2, :, :].transpose(0, 2, 1)
+            return arr.transpose(0, 1, 3, 2)
         fail(f"array shape for {filename} does not match meta nx/ny/nz: {arr.shape} vs ({nx},{ny},{nz})")
     if arr.ndim != 3:
         fail(f"expected 3D/4D array for {filename}, got shape {arr.shape}")
@@ -100,18 +100,63 @@ def build_animation(data: np.ndarray, field: str, out_path: Path, fps: int) -> P
     cmap = "viridis" if field == "pressure" else "Blues"
     title = "Pressure" if field == "pressure" else "Water Saturation"
 
-    fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
-    im = ax.imshow(data[0], origin="lower", cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
-    cb = fig.colorbar(im, ax=ax)
-    cb.set_label(title)
-    label = ax.set_title(f"{title} t=0")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
+    if data.ndim == 4:
+        # Render an isometric-style 3D view using a few representative depth planes.
+        nz, ny, nx = data.shape[1], data.shape[2], data.shape[3]
+        z_slices = sorted({0, nz // 2, nz - 1})
+        x_grid, y_grid = np.meshgrid(np.arange(nx), np.arange(ny))
+        z_scale = max(1.0, 0.25 * max(nx, ny) / max(1, nz))
+        fig = plt.figure(figsize=(8.0, 6.0), constrained_layout=True)
+        ax = fig.add_subplot(111, projection="3d")
+        norm = plt.Normalize(vmin=vmin, vmax=vmax)
+        mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+        fig.colorbar(mappable, ax=ax, fraction=0.04, pad=0.08, label=title)
 
-    def _update(frame: int):
-        im.set_data(data[frame])
-        label.set_text(f"{title} t={frame}")
-        return (im,)
+        def _draw_frame(frame: int) -> tuple:
+            ax.cla()
+            for z_idx in z_slices:
+                z_plane = np.full_like(x_grid, z_idx * z_scale, dtype=float)
+                face_colors = plt.get_cmap(cmap)(norm(data[frame, z_idx]))
+                ax.plot_surface(
+                    x_grid,
+                    y_grid,
+                    z_plane,
+                    facecolors=face_colors,
+                    rstride=1,
+                    cstride=1,
+                    shade=False,
+                    linewidth=0,
+                    antialiased=False,
+                    alpha=0.88,
+                )
+            ax.set_title(f"{title} 3D Isometric t={frame}")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.set_zlabel("z")
+            ax.set_xlim(0, max(nx - 1, 1))
+            ax.set_ylim(0, max(ny - 1, 1))
+            ax.set_zlim(0, max((nz - 1) * z_scale, 1))
+            ax.view_init(elev=28, azim=-55)
+            ax.set_box_aspect((max(nx, 1), max(ny, 1), max(nz * z_scale, 1)))
+            return ()
+
+        _draw_frame(0)
+
+        def _update(frame: int):
+            return _draw_frame(frame)
+    else:
+        fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
+        im = ax.imshow(data[0], origin="lower", cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
+        cb = fig.colorbar(im, ax=ax)
+        cb.set_label(title)
+        label = ax.set_title(f"{title} t=0")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+
+        def _update(frame: int):
+            im.set_data(data[frame])
+            label.set_text(f"{title} t={frame}")
+            return (im,)
 
     writer_used = ""
     if shutil.which("ffmpeg"):

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./webui [--host 127.0.0.1] [--port 8765]
+
+Launch the browser-based workflow UI.
+Advanced CLI workflows remain available via:
+  ./workflow <command> [options]
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+exec "$ROOT_DIR/workflow" web-ui "$@"
