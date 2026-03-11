@@ -30,8 +30,8 @@ void check_cuda(cudaError_t code, const char* where) {
     throw CliError(ExitCode::E_IO, "E_IO", std::string(where) + ": " + cudaGetErrorString(code));
 }
 
-size_t cell_index(int x, int y, int nx) {
-    return static_cast<size_t>(y) * static_cast<size_t>(nx) + static_cast<size_t>(x);
+size_t cell_index(int x, int y, int z, int nx, int ny) {
+    return (static_cast<size_t>(z) * static_cast<size_t>(ny) + static_cast<size_t>(y)) * static_cast<size_t>(nx) + static_cast<size_t>(x);
 }
 
 double effective_saturation_host(const SimulationConfig& cfg, double sw) {
@@ -68,6 +68,7 @@ double total_water_mass(const ReservoirState& state) {
 struct DeviceTransportParams {
     int nx;
     int ny;
+    int nz;
     double dt_days;
     double swc;
     double sor;
@@ -80,8 +81,10 @@ struct DeviceTransportParams {
     int wells_enabled;
     int injector_cell_x;
     int injector_cell_y;
+    int injector_cell_z;
     int producer_cell_x;
     int producer_cell_y;
+    int producer_cell_z;
     double injector_rate_stb_day;
     double producer_bhp_psi;
     double producer_pi;
@@ -94,6 +97,7 @@ struct DeviceBuffers {
     double* permeability = nullptr;
     double* flux_x = nullptr;
     double* flux_y = nullptr;
+    double* flux_z = nullptr;
     double* q_water = nullptr;
     double* next_sw = nullptr;
     int* clip_flags = nullptr;
@@ -116,6 +120,9 @@ struct DeviceBuffers {
         }
         if (flux_y != nullptr) {
             (void)cudaFree(flux_y);
+        }
+        if (flux_z != nullptr) {
+            (void)cudaFree(flux_z);
         }
         if (q_water != nullptr) {
             (void)cudaFree(q_water);
@@ -156,27 +163,32 @@ struct TransportGpuWorkspace {
     DeviceBuffers d;
     int nx = -1;
     int ny = -1;
+    int nz = -1;
     size_t cell_count = 0;
     size_t flux_x_count = 0;
     size_t flux_y_count = 0;
+    size_t flux_z_count = 0;
     const double* porosity_ptr = nullptr;
     const double* permeability_ptr = nullptr;
     bool constants_synced = false;
 
-    void ensure_capacity(int in_nx, int in_ny) {
-        const size_t wanted_cells = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny);
-        const size_t wanted_fx = static_cast<size_t>(in_nx - 1) * static_cast<size_t>(in_ny);
-        const size_t wanted_fy = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny - 1);
-        if (in_nx == nx && in_ny == ny && wanted_cells == cell_count &&
-            wanted_fx == flux_x_count && wanted_fy == flux_y_count) {
+    void ensure_capacity(int in_nx, int in_ny, int in_nz) {
+        const size_t wanted_cells = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny) * static_cast<size_t>(in_nz);
+        const size_t wanted_fx = static_cast<size_t>(in_nx - 1) * static_cast<size_t>(in_ny) * static_cast<size_t>(in_nz);
+        const size_t wanted_fy = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny - 1) * static_cast<size_t>(in_nz);
+        const size_t wanted_fz = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny) * static_cast<size_t>(in_nz - 1);
+        if (in_nx == nx && in_ny == ny && in_nz == nz && wanted_cells == cell_count &&
+            wanted_fx == flux_x_count && wanted_fy == flux_y_count && wanted_fz == flux_z_count) {
             return;
         }
 
         nx = in_nx;
         ny = in_ny;
+        nz = in_nz;
         cell_count = wanted_cells;
         flux_x_count = wanted_fx;
         flux_y_count = wanted_fy;
+        flux_z_count = wanted_fz;
         constants_synced = false;
         porosity_ptr = nullptr;
         permeability_ptr = nullptr;
@@ -190,6 +202,7 @@ struct TransportGpuWorkspace {
         realloc_device(d.clip_flags, cell_count * sizeof(int), "cudaMalloc(d_clip_flags)");
         realloc_device(d.flux_x, flux_x_count * sizeof(double), "cudaMalloc(d_flux_x)");
         realloc_device(d.flux_y, flux_y_count * sizeof(double), "cudaMalloc(d_flux_y)");
+        realloc_device(d.flux_z, flux_z_count * sizeof(double), "cudaMalloc(d_flux_z)");
     }
 };
 
@@ -198,8 +211,8 @@ TransportGpuWorkspace& transport_workspace() {
     return ws;
 }
 
-__device__ int cell_index_device(int x, int y, int nx) {
-    return y * nx + x;
+__device__ int cell_index_device(int x, int y, int z, int nx, int ny) {
+    return (z * ny + y) * nx + x;
 }
 
 __device__ double clamp_device(double v, double lo, double hi) {
@@ -244,16 +257,18 @@ __global__ void compute_flux_x_kernel(
     const double* permeability,
     double* flux_x) {
     const int fx_nx = p.nx - 1;
-    const int count = fx_nx * p.ny;
+    const int count = fx_nx * p.ny * p.nz;
     const int face_idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
     if (face_idx >= count) {
         return;
     }
 
-    const int x = face_idx % fx_nx;
-    const int y = face_idx / fx_nx;
-    const int i = cell_index_device(x, y, p.nx);
-    const int j = cell_index_device(x + 1, y, p.nx);
+    const int z = face_idx / (fx_nx * p.ny);
+    const int rem = face_idx % (fx_nx * p.ny);
+    const int x = rem % fx_nx;
+    const int y = rem / fx_nx;
+    const int i = cell_index_device(x, y, z, p.nx, p.ny);
+    const int j = cell_index_device(x + 1, y, z, p.nx, p.ny);
     const double lambda_i = total_mobility_device(p, sw[i]);
     const double lambda_j = total_mobility_device(p, sw[j]);
     const double perm_face = harmonic_average_device(permeability[i], permeability[j]);
@@ -269,22 +284,51 @@ __global__ void compute_flux_y_kernel(
     const double* permeability,
     double* flux_y) {
     const int fy_ny = p.ny - 1;
-    const int count = p.nx * fy_ny;
+    const int count = p.nx * fy_ny * p.nz;
     const int face_idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
     if (face_idx >= count) {
         return;
     }
 
-    const int x = face_idx % p.nx;
-    const int y = face_idx / p.nx;
-    const int i = cell_index_device(x, y, p.nx);
-    const int j = cell_index_device(x, y + 1, p.nx);
+    const int z = face_idx / (p.nx * fy_ny);
+    const int rem = face_idx % (p.nx * fy_ny);
+    const int x = rem % p.nx;
+    const int y = rem / p.nx;
+    const int i = cell_index_device(x, y, z, p.nx, p.ny);
+    const int j = cell_index_device(x, y + 1, z, p.nx, p.ny);
     const double lambda_i = total_mobility_device(p, sw[i]);
     const double lambda_j = total_mobility_device(p, sw[j]);
     const double perm_face = harmonic_average_device(permeability[i], permeability[j]);
     const double lambda_face = harmonic_average_device(lambda_i, lambda_j);
     const double transmissibility = perm_face * lambda_face;
     flux_y[face_idx] = -transmissibility * (pressure[j] - pressure[i]);
+}
+
+__global__ void compute_flux_z_kernel(
+    DeviceTransportParams p,
+    const double* pressure,
+    const double* sw,
+    const double* permeability,
+    double* flux_z) {
+    const int fz_nz = p.nz - 1;
+    const int count = p.nx * p.ny * fz_nz;
+    const int face_idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+    if (face_idx >= count) {
+        return;
+    }
+
+    const int z = face_idx / (p.nx * p.ny);
+    const int rem = face_idx % (p.nx * p.ny);
+    const int x = rem % p.nx;
+    const int y = rem / p.nx;
+    const int i = cell_index_device(x, y, z, p.nx, p.ny);
+    const int j = cell_index_device(x, y, z + 1, p.nx, p.ny);
+    const double lambda_i = total_mobility_device(p, sw[i]);
+    const double lambda_j = total_mobility_device(p, sw[j]);
+    const double perm_face = harmonic_average_device(permeability[i], permeability[j]);
+    const double lambda_face = harmonic_average_device(lambda_i, lambda_j);
+    const double transmissibility = perm_face * lambda_face;
+    flux_z[face_idx] = -transmissibility * (pressure[j] - pressure[i]);
 }
 
 __global__ void build_well_sources_kernel(
@@ -297,8 +341,8 @@ __global__ void build_well_sources_kernel(
     }
 
     constexpr double kWellRateScale = 1.0e-3;
-    const int injector_idx = cell_index_device(p.injector_cell_x, p.injector_cell_y, p.nx);
-    const int producer_idx = cell_index_device(p.producer_cell_x, p.producer_cell_y, p.nx);
+    const int injector_idx = cell_index_device(p.injector_cell_x, p.injector_cell_y, p.injector_cell_z, p.nx, p.ny);
+    const int producer_idx = cell_index_device(p.producer_cell_x, p.producer_cell_y, p.producer_cell_z, p.nx, p.ny);
     const double q_inj = kWellRateScale * p.injector_rate_stb_day;
     q_water[injector_idx] += q_inj;
 
@@ -314,41 +358,59 @@ __global__ void update_saturation_kernel(
     const double* porosity,
     const double* flux_x,
     const double* flux_y,
+    const double* flux_z,
     const double* q_water,
     double* next_sw,
     int* clip_flags) {
     const int idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
-    const int count = p.nx * p.ny;
+    const int count = p.nx * p.ny * p.nz;
     if (idx >= count) {
         return;
     }
 
-    const int x = idx % p.nx;
-    const int y = idx / p.nx;
+    const int cells_per_layer = p.nx * p.ny;
+    const int z = idx / cells_per_layer;
+    const int rem = idx % cells_per_layer;
+    const int x = rem % p.nx;
+    const int y = rem / p.nx;
     double water_flux_sum = 0.0;
 
+    const int fx_nx = p.nx - 1;
+    const int fy_ny = p.ny - 1;
     if (x > 0) {
-        const int face = cell_index_device(x - 1, y, p.nx - 1);
+        const int face = cell_index_device(x - 1, y, z, fx_nx, p.ny);
         const double outward_flux = -flux_x[face];
-        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x - 1, y, p.nx);
+        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x - 1, y, z, p.nx, p.ny);
         water_flux_sum += fractional_flow_water_device(p, sw[upwind]) * outward_flux;
     }
     if (x + 1 < p.nx) {
-        const int face = cell_index_device(x, y, p.nx - 1);
+        const int face = cell_index_device(x, y, z, fx_nx, p.ny);
         const double outward_flux = flux_x[face];
-        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x + 1, y, p.nx);
+        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x + 1, y, z, p.nx, p.ny);
         water_flux_sum += fractional_flow_water_device(p, sw[upwind]) * outward_flux;
     }
     if (y > 0) {
-        const int face = cell_index_device(x, y - 1, p.nx);
+        const int face = cell_index_device(x, y - 1, z, p.nx, fy_ny);
         const double outward_flux = -flux_y[face];
-        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x, y - 1, p.nx);
+        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x, y - 1, z, p.nx, p.ny);
         water_flux_sum += fractional_flow_water_device(p, sw[upwind]) * outward_flux;
     }
     if (y + 1 < p.ny) {
-        const int face = cell_index_device(x, y, p.nx);
+        const int face = cell_index_device(x, y, z, p.nx, fy_ny);
         const double outward_flux = flux_y[face];
-        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x, y + 1, p.nx);
+        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x, y + 1, z, p.nx, p.ny);
+        water_flux_sum += fractional_flow_water_device(p, sw[upwind]) * outward_flux;
+    }
+    if (z > 0) {
+        const int face = cell_index_device(x, y, z - 1, p.nx, p.ny);
+        const double outward_flux = -flux_z[face];
+        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x, y, z - 1, p.nx, p.ny);
+        water_flux_sum += fractional_flow_water_device(p, sw[upwind]) * outward_flux;
+    }
+    if (z + 1 < p.nz) {
+        const int face = cell_index_device(x, y, z, p.nx, p.ny);
+        const double outward_flux = flux_z[face];
+        const int upwind = (outward_flux >= 0.0) ? idx : cell_index_device(x, y, z + 1, p.nx, p.ny);
         water_flux_sum += fractional_flow_water_device(p, sw[upwind]) * outward_flux;
     }
 
@@ -366,9 +428,6 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
     if (state.nx != cfg.nx || state.ny != cfg.ny || state.nz != cfg.nz) {
         fail("state dimensions must match configuration.");
     }
-    if (cfg.nz != 1) {
-        fail("GPU transport backend currently supports only nz=1.");
-    }
     if (!(dt_days > 0.0) || !std::isfinite(dt_days)) {
         fail("transport dt_days must be finite and positive.");
     }
@@ -379,7 +438,7 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
         fail_io("backend=gpu requested but no CUDA device is available.");
     }
 
-    const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny);
+    const size_t count = static_cast<size_t>(cfg.nx) * static_cast<size_t>(cfg.ny) * static_cast<size_t>(cfg.nz);
 
     const double mass_before = total_water_mass(state);
     std::vector<double> next_sw(count, 0.0);
@@ -388,6 +447,7 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
     DeviceTransportParams params{};
     params.nx = cfg.nx;
     params.ny = cfg.ny;
+    params.nz = cfg.nz;
     params.dt_days = dt_days;
     params.swc = cfg.fluid.swc;
     params.sor = cfg.fluid.sor;
@@ -400,14 +460,16 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
     params.wells_enabled = cfg.wells.enabled ? 1 : 0;
     params.injector_cell_x = cfg.wells.injector_cell_x;
     params.injector_cell_y = cfg.wells.injector_cell_y;
+    params.injector_cell_z = cfg.wells.injector_cell_z;
     params.producer_cell_x = cfg.wells.producer_cell_x;
     params.producer_cell_y = cfg.wells.producer_cell_y;
+    params.producer_cell_z = cfg.wells.producer_cell_z;
     params.injector_rate_stb_day = cfg.wells.injector_rate_stb_day;
     params.producer_bhp_psi = cfg.wells.producer_bhp_psi;
     params.producer_pi = cfg.wells.producer_pi;
 
     TransportGpuWorkspace& ws = transport_workspace();
-    ws.ensure_capacity(cfg.nx, cfg.ny);
+    ws.ensure_capacity(cfg.nx, cfg.ny, cfg.nz);
 
     if (!ws.constants_synced || ws.porosity_ptr != state.porosity.data() || ws.permeability_ptr != state.permeability_md.data()) {
         check_cuda(
@@ -441,11 +503,17 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
         compute_flux_y_kernel<<<flux_y_blocks, threads_per_block>>>(params, ws.d.pressure, ws.d.sw, ws.d.permeability, ws.d.flux_y);
         check_cuda(cudaGetLastError(), "compute_flux_y_kernel launch");
     }
+    if (ws.flux_z_count > 0) {
+        const int flux_z_blocks = static_cast<int>((ws.flux_z_count + static_cast<size_t>(threads_per_block) - 1U) / static_cast<size_t>(threads_per_block));
+        compute_flux_z_kernel<<<flux_z_blocks, threads_per_block>>>(params, ws.d.pressure, ws.d.sw, ws.d.permeability, ws.d.flux_z);
+        check_cuda(cudaGetLastError(), "compute_flux_z_kernel launch");
+    }
     build_well_sources_kernel<<<1, 1>>>(params, ws.d.pressure, ws.d.sw, ws.d.q_water);
     check_cuda(cudaGetLastError(), "build_well_sources_kernel launch");
 
     const int blocks = static_cast<int>((count + static_cast<size_t>(threads_per_block) - 1U) / static_cast<size_t>(threads_per_block));
-    update_saturation_kernel<<<blocks, threads_per_block>>>(params, ws.d.sw, ws.d.porosity, ws.d.flux_x, ws.d.flux_y, ws.d.q_water, ws.d.next_sw, ws.d.clip_flags);
+    update_saturation_kernel<<<blocks, threads_per_block>>>(
+        params, ws.d.sw, ws.d.porosity, ws.d.flux_x, ws.d.flux_y, ws.d.flux_z, ws.d.q_water, ws.d.next_sw, ws.d.clip_flags);
     check_cuda(cudaGetLastError(), "update_saturation_kernel launch");
     check_cuda(cudaDeviceSynchronize(), "cudaDeviceSynchronize(update_saturation_kernel)");
 
@@ -464,7 +532,8 @@ TransportDiagnostics advance_saturation_impes_with_dt_gpu(const SimulationConfig
     double expected_source_delta = 0.0;
     if (cfg.wells.enabled) {
         constexpr double kWellRateScale = 1.0e-3;
-        const size_t producer_idx = cell_index(cfg.wells.producer_cell_x, cfg.wells.producer_cell_y, cfg.nx);
+        const size_t producer_idx = cell_index(
+            cfg.wells.producer_cell_x, cfg.wells.producer_cell_y, cfg.wells.producer_cell_z, cfg.nx, cfg.ny);
         const double q_inj = kWellRateScale * cfg.wells.injector_rate_stb_day;
         const double drawdown = std::max(state.pressure[producer_idx] - cfg.wells.producer_bhp_psi, 0.0);
         const double q_prod_abs = kWellRateScale * cfg.wells.producer_pi * drawdown;

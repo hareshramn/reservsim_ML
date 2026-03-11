@@ -94,9 +94,6 @@ Each run writes:
 `meta.json` minimum fields:
 - `case_name`, `nx`, `ny`, `nz`, `backend`, `dt_policy`, `units`, `version`.
 
-Current backend limitation:
-- GPU path is supported for `nz=1` only.
-- For `nz>1`, use `backend=cpu`.
 
 ## Interface Stability Policy
 

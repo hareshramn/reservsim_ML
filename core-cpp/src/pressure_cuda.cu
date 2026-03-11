@@ -45,6 +45,7 @@ void realloc_device(T*& ptr, size_t count, const char* where) {
 struct PressureGpuWorkspace {
     int nx = 0;
     int ny = 0;
+    int nz = 0;
     size_t count = 0;
     size_t partial_count = 0;
 
@@ -53,6 +54,8 @@ struct PressureGpuWorkspace {
     double* east = nullptr;
     double* south = nullptr;
     double* north = nullptr;
+    double* down = nullptr;
+    double* up = nullptr;
     double* rhs = nullptr;
 
     double* x = nullptr;
@@ -69,6 +72,8 @@ struct PressureGpuWorkspace {
         free_device(east);
         free_device(south);
         free_device(north);
+        free_device(down);
+        free_device(up);
         free_device(rhs);
         free_device(x);
         free_device(r);
@@ -79,16 +84,18 @@ struct PressureGpuWorkspace {
         free_device(partial_b);
     }
 
-    void ensure_capacity(int in_nx, int in_ny) {
-        const size_t wanted_count = static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny);
+    void ensure_capacity(int in_nx, int in_ny, int in_nz) {
+        const size_t wanted_count =
+            static_cast<size_t>(in_nx) * static_cast<size_t>(in_ny) * static_cast<size_t>(in_nz);
         constexpr int threads = 256;
         const size_t wanted_partial = (wanted_count + static_cast<size_t>(threads) - 1U) / static_cast<size_t>(threads);
-        if (nx == in_nx && ny == in_ny && count == wanted_count && partial_count == wanted_partial) {
+        if (nx == in_nx && ny == in_ny && nz == in_nz && count == wanted_count && partial_count == wanted_partial) {
             return;
         }
 
         nx = in_nx;
         ny = in_ny;
+        nz = in_nz;
         count = wanted_count;
         partial_count = wanted_partial;
 
@@ -97,6 +104,8 @@ struct PressureGpuWorkspace {
         realloc_device(east, count, "cudaMalloc(east)");
         realloc_device(south, count, "cudaMalloc(south)");
         realloc_device(north, count, "cudaMalloc(north)");
+        realloc_device(down, count, "cudaMalloc(down)");
+        realloc_device(up, count, "cudaMalloc(up)");
         realloc_device(rhs, count, "cudaMalloc(rhs)");
         realloc_device(x, count, "cudaMalloc(x)");
         realloc_device(r, count, "cudaMalloc(r)");
@@ -113,40 +122,52 @@ PressureGpuWorkspace& pressure_workspace() {
     return ws;
 }
 
-__device__ int cell_index_device(int x, int y, int nx) {
-    return y * nx + x;
+__device__ int cell_index_device(int x, int y, int z, int nx, int ny) {
+    return (z * ny + y) * nx + x;
 }
 
 __global__ void apply_system_kernel(
     int nx,
     int ny,
+    int nz,
     const double* diag,
     const double* west,
     const double* east,
     const double* south,
     const double* north,
+    const double* down,
+    const double* up,
     const double* x,
     double* y) {
     const int idx = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
-    const int count = nx * ny;
+    const int count = nx * ny * nz;
     if (idx >= count) {
         return;
     }
 
-    const int cx = idx % nx;
-    const int cy = idx / nx;
+    const int cells_per_layer = nx * ny;
+    const int cz = idx / cells_per_layer;
+    const int rem = idx % cells_per_layer;
+    const int cx = rem % nx;
+    const int cy = rem / nx;
     double value = diag[idx] * x[idx];
     if (cx > 0) {
-        value += west[idx] * x[cell_index_device(cx - 1, cy, nx)];
+        value += west[idx] * x[cell_index_device(cx - 1, cy, cz, nx, ny)];
     }
     if (cx + 1 < nx) {
-        value += east[idx] * x[cell_index_device(cx + 1, cy, nx)];
+        value += east[idx] * x[cell_index_device(cx + 1, cy, cz, nx, ny)];
     }
     if (cy > 0) {
-        value += south[idx] * x[cell_index_device(cx, cy - 1, nx)];
+        value += south[idx] * x[cell_index_device(cx, cy - 1, cz, nx, ny)];
     }
     if (cy + 1 < ny) {
-        value += north[idx] * x[cell_index_device(cx, cy + 1, nx)];
+        value += north[idx] * x[cell_index_device(cx, cy + 1, cz, nx, ny)];
+    }
+    if (cz > 0) {
+        value += down[idx] * x[cell_index_device(cx, cy, cz - 1, nx, ny)];
+    }
+    if (cz + 1 < nz) {
+        value += up[idx] * x[cell_index_device(cx, cy, cz + 1, nx, ny)];
     }
     y[idx] = value;
 }
@@ -260,16 +281,14 @@ double dot_device(const double* a, const double* b, size_t n, PressureGpuWorkspa
 }
 
 void validate_system_shape(const PressureSystem& system) {
-    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny);
+    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny) * static_cast<size_t>(system.nz);
     if (system.nx <= 0 || system.ny <= 0 || system.nz <= 0) {
         fail_schema("pressure system dimensions must be positive.");
     }
-    if (system.nz != 1) {
-        fail_schema("GPU pressure backend currently supports only nz=1.");
-    }
     if (system.diag.size() != count || system.west.size() != count || system.east.size() != count ||
-        system.south.size() != count || system.north.size() != count || system.rhs.size() != count) {
-        fail_schema("pressure system arrays must match nx * ny.");
+        system.south.size() != count || system.north.size() != count ||
+        system.down.size() != count || system.up.size() != count || system.rhs.size() != count) {
+        fail_schema("pressure system arrays must match nx * ny * nz.");
     }
 }
 
@@ -290,7 +309,7 @@ PressureSolveResult solve_pressure_cg_jacobi_gpu(
     double relative_tolerance,
     int max_iterations) {
     validate_system_shape(system);
-    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny);
+    const size_t count = static_cast<size_t>(system.nx) * static_cast<size_t>(system.ny) * static_cast<size_t>(system.nz);
     if (initial_guess.size() != count) {
         fail_schema("pressure solver initial guess must match system size.");
     }
@@ -311,20 +330,23 @@ PressureSolveResult solve_pressure_cg_jacobi_gpu(
     }
 
     PressureGpuWorkspace& ws = pressure_workspace();
-    ws.ensure_capacity(system.nx, system.ny);
+    ws.ensure_capacity(system.nx, system.ny, system.nz);
 
     check_cuda(cudaMemcpy(ws.diag, system.diag.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(diag)");
     check_cuda(cudaMemcpy(ws.west, system.west.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(west)");
     check_cuda(cudaMemcpy(ws.east, system.east.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(east)");
     check_cuda(cudaMemcpy(ws.south, system.south.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(south)");
     check_cuda(cudaMemcpy(ws.north, system.north.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(north)");
+    check_cuda(cudaMemcpy(ws.down, system.down.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(down)");
+    check_cuda(cudaMemcpy(ws.up, system.up.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(up)");
     check_cuda(cudaMemcpy(ws.rhs, system.rhs.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(rhs)");
     check_cuda(cudaMemcpy(ws.x, initial_guess.data(), count * sizeof(double), cudaMemcpyHostToDevice), "cudaMemcpy(x)");
 
     constexpr int threads = 256;
     const int blocks = static_cast<int>((count + static_cast<size_t>(threads) - 1U) / static_cast<size_t>(threads));
 
-    apply_system_kernel<<<blocks, threads>>>(system.nx, system.ny, ws.diag, ws.west, ws.east, ws.south, ws.north, ws.x, ws.ap);
+    apply_system_kernel<<<blocks, threads>>>(
+        system.nx, system.ny, system.nz, ws.diag, ws.west, ws.east, ws.south, ws.north, ws.down, ws.up, ws.x, ws.ap);
     check_cuda(cudaGetLastError(), "apply_system_kernel(initial) launch");
     residual_kernel<<<blocks, threads>>>(ws.rhs, ws.ap, ws.r, static_cast<int>(count));
     check_cuda(cudaGetLastError(), "residual_kernel(initial) launch");
@@ -351,7 +373,8 @@ PressureSolveResult solve_pressure_cg_jacobi_gpu(
 
     int iters = 0;
     for (int iter = 0; iter < max_iterations; ++iter) {
-        apply_system_kernel<<<blocks, threads>>>(system.nx, system.ny, ws.diag, ws.west, ws.east, ws.south, ws.north, ws.p, ws.ap);
+        apply_system_kernel<<<blocks, threads>>>(
+            system.nx, system.ny, system.nz, ws.diag, ws.west, ws.east, ws.south, ws.north, ws.down, ws.up, ws.p, ws.ap);
         check_cuda(cudaGetLastError(), "apply_system_kernel(iter) launch");
 
         const double p_ap = dot_device(ws.p, ws.ap, count, ws);

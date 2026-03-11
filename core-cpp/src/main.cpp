@@ -673,12 +673,6 @@ int main(int argc, char** argv) {
     try {
         const Args args = parse_args(argc, argv);
         const SimulationConfig cfg = load_simulation_config(args.case_path);
-        if (args.backend == "gpu" && cfg.nz > 1) {
-            emit_and_exit(
-                ExitCode::E_ARG_INVALID,
-                "E_ARG_INVALID",
-                "backend=gpu currently supports only nz=1. Use backend=cpu for 3D runs.");
-        }
         if (args.backend == "gpu" && !gpu_transport_enabled()) {
             emit_and_exit(
                 ExitCode::E_ARG_INVALID,
