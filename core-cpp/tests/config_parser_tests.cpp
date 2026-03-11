@@ -61,18 +61,6 @@ void test_valid_wells_case() {
     expect_true(cfg.wells.producer_pi > 1.49 && cfg.wells.producer_pi < 1.51, "producer pi parse");
 }
 
-void test_valid_layered_case() {
-    const SimulationConfig cfg = load_simulation_config(fixture_path("layered_case.yaml"));
-    expect_true(cfg.nz == 3, "nz parse");
-    expect_true(cfg.rock.layer_count == 3, "rock.layer_count parse");
-    expect_true(cfg.rock.layer_porosity.size() == 3, "rock.layer_porosity size");
-    expect_true(cfg.rock.layer_permeability_md.size() == 3, "rock.layer_permeability_md size");
-    expect_true(cfg.rock.layer_porosity[0] > 0.17 && cfg.rock.layer_porosity[0] < 0.19, "layer porosity[0]");
-    expect_true(cfg.rock.layer_porosity[2] > 0.25 && cfg.rock.layer_porosity[2] < 0.27, "layer porosity[2]");
-    expect_true(cfg.rock.layer_permeability_md[0] > 49.0 && cfg.rock.layer_permeability_md[0] < 51.0, "layer perm[0]");
-    expect_true(cfg.rock.layer_permeability_md[2] > 399.0 && cfg.rock.layer_permeability_md[2] < 401.0, "layer perm[2]");
-}
-
 void expect_throws(const std::string& file, ExitCode code, const std::string& symbol) {
     try {
         (void)load_simulation_config(fixture_path(file));
@@ -87,7 +75,6 @@ void test_invalid_cases() {
     expect_throws("bad_yaml.yaml", ExitCode::E_CASE_PARSE, "E_CASE_PARSE");
     expect_throws("missing_required.yaml", ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA");
     expect_throws("bad_range.yaml", ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA");
-    expect_throws("bad_layer_count.yaml", ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA");
 }
 
 }  // namespace
@@ -95,7 +82,6 @@ void test_invalid_cases() {
 int main() {
     test_valid_case();
     test_valid_wells_case();
-    test_valid_layered_case();
     test_invalid_cases();
     std::cout << "config_parser_tests: PASS\n";
     return 0;

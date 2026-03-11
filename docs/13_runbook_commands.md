@@ -23,10 +23,6 @@ tools/model_run.sh --model-dir <dir> --backend cpu|gpu --steps <N> --output-ever
 Expected behavior:
 - Parse case config.
 - Accept optional top-level `nz` (default `1`) for 3D runs.
-- Accept optional layered-rock fields in case YAML:
-  - `rock.layer_count`,
-  - `rock.layer_porosity`,
-  - `rock.layer_permeability_md`.
 - Run until `min(N, schedule_end_step)`.
 - Persist schema-defined arrays and metadata.
 - Emit `timing.csv`.

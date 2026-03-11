@@ -21,12 +21,6 @@ ReservoirState initialize_state(const SimulationConfig& cfg) {
     if (cfg.rock.permeability_md <= 0.0) {
         fail("rock.permeability_md must be positive for state initialization.");
     }
-    if (cfg.rock.layer_count <= 0) {
-        fail("rock.layer_count must be positive for state initialization.");
-    }
-    if (cfg.rock.layer_count > cfg.ny) {
-        fail("rock.layer_count cannot exceed ny for y-layer mapping.");
-    }
     if (cfg.fluid.swc < 0.0 || cfg.fluid.sor < 0.0 || cfg.fluid.swc + cfg.fluid.sor >= 1.0) {
         fail("fluid.swc and fluid.sor must satisfy swc + sor < 1.");
     }
@@ -43,25 +37,6 @@ ReservoirState initialize_state(const SimulationConfig& cfg) {
     state.sw.assign(count, sw_init);
     state.porosity.assign(count, cfg.rock.porosity);
     state.permeability_md.assign(count, cfg.rock.permeability_md);
-
-    if (cfg.rock.layer_count > 1) {
-        if (cfg.rock.layer_porosity.size() != static_cast<size_t>(cfg.rock.layer_count) ||
-            cfg.rock.layer_permeability_md.size() != static_cast<size_t>(cfg.rock.layer_count)) {
-            fail("layer property vectors must match rock.layer_count.");
-        }
-        for (int z = 0; z < cfg.nz; ++z) {
-            for (int y = 0; y < cfg.ny; ++y) {
-                const int layer = (y * cfg.rock.layer_count) / cfg.ny;
-                for (int x = 0; x < cfg.nx; ++x) {
-                    const size_t idx =
-                        (static_cast<size_t>(z) * static_cast<size_t>(cfg.ny) + static_cast<size_t>(y)) * static_cast<size_t>(cfg.nx) +
-                        static_cast<size_t>(x);
-                    state.porosity[idx] = cfg.rock.layer_porosity[static_cast<size_t>(layer)];
-                    state.permeability_md[idx] = cfg.rock.layer_permeability_md[static_cast<size_t>(layer)];
-                }
-            }
-        }
-    }
 
     validate_state_invariants(state);
     return state;

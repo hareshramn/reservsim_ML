@@ -52,30 +52,15 @@ python python/ml/train_surrogate.py --data <dir> --config <yaml>
 python python/ml/eval_surrogate.py --checkpoint <ckpt> --case <path> --out <dir>
 ```
 
-## Case Schema Contract (Rock Layering v1)
+## Case Schema Contract (3D Grid v1)
 
-Case YAML keeps existing required keys and adds optional layered rock keys under `rock`:
+Case YAML keeps existing required keys and supports 3D grids via:
 
 - `nz` (integer, optional at top-level):
   - defaults to `1` when omitted.
   - when `nz > 1`, simulator runs a 3D Cartesian grid.
 
-- `layer_count` (integer, optional):
-  - if omitted, defaults to homogeneous rock (`1` layer).
-  - if provided with layer lists, must be `> 1`.
-- `layer_porosity` (comma-separated numbers, optional):
-  - list length must equal `layer_count`.
-  - each value must be in `[0, 1]`.
-  - if omitted while layered mode is enabled, scalar `rock.porosity` is used for all layers.
-- `layer_permeability_md` (comma-separated numbers, optional):
-  - list length must equal `layer_count`.
-  - each value must be positive.
-  - if omitted while layered mode is enabled, scalar `rock.permeability_md` is used for all layers.
-
-Layer mapping policy (locked v1):
-- Layering is applied along the `y` axis as horizontal bands.
-- Cell row `y` is mapped by `floor(y * layer_count / ny)`.
-- `layer_count` must not exceed `ny`.
+- Rock properties remain scalar in v1 (`rock.porosity`, `rock.permeability_md`) and are applied uniformly across all cells.
 
 ## Output Schema Contract
 

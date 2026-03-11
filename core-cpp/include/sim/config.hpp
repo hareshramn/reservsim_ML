@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 struct PhysicsConfig {
     std::string phases;
@@ -13,9 +12,6 @@ struct PhysicsConfig {
 struct RockConfig {
     double porosity = 0.0;
     double permeability_md = 0.0;
-    int layer_count = 1;
-    std::vector<double> layer_porosity;
-    std::vector<double> layer_permeability_md;
 };
 
 struct FluidConfig {

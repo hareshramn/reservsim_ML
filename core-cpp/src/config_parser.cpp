@@ -5,7 +5,6 @@
 #include <cctype>
 #include <fstream>
 #include <map>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
@@ -110,32 +109,6 @@ bool parse_bool(const std::string& raw, const std::string& field) {
     fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " must be true or false.");
 }
 
-std::vector<double> parse_csv_doubles(const std::string& raw, const std::string& field) {
-    std::vector<double> out;
-    std::stringstream ss(raw);
-    std::string token;
-    while (std::getline(ss, token, ',')) {
-        token = trim(token);
-        if (token.empty()) {
-            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " contains an empty list entry.");
-        }
-        try {
-            size_t idx = 0;
-            const double value = std::stod(token, &idx);
-            if (idx != token.size()) {
-                fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " contains an invalid number: " + token);
-            }
-            out.push_back(value);
-        } catch (const std::exception&) {
-            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " contains an invalid number: " + token);
-        }
-    }
-    if (out.empty()) {
-        fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA", field + " must define at least one value.");
-    }
-    return out;
-}
-
 std::string require_field(const std::map<std::string, std::string>& fields, const std::string& key) {
     const auto it = fields.find(key);
     if (it == fields.end()) {
@@ -233,61 +206,12 @@ SimulationConfig load_simulation_config(const std::string& case_path) {
     cfg.physics.capillary = parse_bool(require_field(fields, "physics.capillary"), "physics.capillary");
     cfg.rock.porosity = parse_unit_interval_double(require_field(fields, "rock.porosity"), "rock.porosity");
     cfg.rock.permeability_md = parse_positive_double(require_field(fields, "rock.permeability_md"), "rock.permeability_md");
-    if (const auto it = fields.find("rock.layer_count"); it != fields.end()) {
-        cfg.rock.layer_count = parse_positive_int(it->second, "rock.layer_count");
-    }
     cfg.fluid.mu_w_cp = parse_positive_double(require_field(fields, "fluid.mu_w_cp"), "fluid.mu_w_cp");
     cfg.fluid.mu_o_cp = parse_positive_double(require_field(fields, "fluid.mu_o_cp"), "fluid.mu_o_cp");
     cfg.fluid.swc = parse_unit_interval_double(require_field(fields, "fluid.swc"), "fluid.swc");
     cfg.fluid.sor = parse_unit_interval_double(require_field(fields, "fluid.sor"), "fluid.sor");
     cfg.fluid.nw = parse_positive_double(require_field(fields, "fluid.nw"), "fluid.nw");
     cfg.fluid.no = parse_positive_double(require_field(fields, "fluid.no"), "fluid.no");
-    if (const auto it = fields.find("rock.layer_porosity"); it != fields.end()) {
-        cfg.rock.layer_porosity = parse_csv_doubles(it->second, "rock.layer_porosity");
-    }
-    if (const auto it = fields.find("rock.layer_permeability_md"); it != fields.end()) {
-        cfg.rock.layer_permeability_md = parse_csv_doubles(it->second, "rock.layer_permeability_md");
-    }
-
-    const bool has_layer_porosity = !cfg.rock.layer_porosity.empty();
-    const bool has_layer_permeability = !cfg.rock.layer_permeability_md.empty();
-    const bool has_layer_fields = has_layer_porosity || has_layer_permeability;
-    if (has_layer_fields && cfg.rock.layer_count <= 1) {
-        fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA",
-             "rock.layer_count must be > 1 when layer property lists are provided.");
-    }
-    if (!has_layer_fields) {
-        cfg.rock.layer_count = 1;
-    } else {
-        if (!has_layer_porosity) {
-            cfg.rock.layer_porosity.assign(static_cast<size_t>(cfg.rock.layer_count), cfg.rock.porosity);
-        }
-        if (!has_layer_permeability) {
-            cfg.rock.layer_permeability_md.assign(static_cast<size_t>(cfg.rock.layer_count), cfg.rock.permeability_md);
-        }
-        if (cfg.rock.layer_porosity.size() != static_cast<size_t>(cfg.rock.layer_count)) {
-            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA",
-                 "rock.layer_porosity length must match rock.layer_count.");
-        }
-        if (cfg.rock.layer_permeability_md.size() != static_cast<size_t>(cfg.rock.layer_count)) {
-            fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA",
-                 "rock.layer_permeability_md length must match rock.layer_count.");
-        }
-        for (size_t i = 0; i < cfg.rock.layer_porosity.size(); ++i) {
-            const double value = cfg.rock.layer_porosity[i];
-            if (!(value >= 0.0 && value <= 1.0)) {
-                fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA",
-                     "rock.layer_porosity values must be in [0, 1].");
-            }
-        }
-        for (size_t i = 0; i < cfg.rock.layer_permeability_md.size(); ++i) {
-            const double value = cfg.rock.layer_permeability_md[i];
-            if (!(value > 0.0)) {
-                fail(ExitCode::E_CASE_SCHEMA, "E_CASE_SCHEMA",
-                     "rock.layer_permeability_md values must be positive.");
-            }
-        }
-    }
 
     const bool has_inj_x = fields.find("injector_cell_x") != fields.end();
     const bool has_inj_y = fields.find("injector_cell_y") != fields.end();

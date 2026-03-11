@@ -1,4 +1,4 @@
-case_name: "model3_hetero_24x24"
+case_name: "model3_3d_24x24x4"
 nx: 24
 ny: 24
 nz: 4
@@ -13,9 +13,6 @@ physics:
 rock:
   porosity: 0.22
   permeability_md: 150.0
-  layer_count: 4
-  layer_porosity: 0.18, 0.2, 0.24, 0.27
-  layer_permeability_md: 40.0, 90.0, 220.0, 500.0
 fluid:
   mu_w_cp: 0.8
   mu_o_cp: 2.5

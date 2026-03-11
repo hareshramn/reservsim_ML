@@ -85,28 +85,12 @@ void test_invariant_validation() {
     }
 }
 
-void test_layered_state_initialization() {
-    const SimulationConfig cfg = load_simulation_config(fixture_path("layered_case.yaml"));
-    const ReservoirState state = initialize_state(cfg);
-
-    expect_true(cfg.ny == 6, "fixture ny");
-    for (int z = 0; z < cfg.nz; ++z) {
-        for (int y = 0; y < cfg.ny; ++y) {
-            const int layer = (y * cfg.rock.layer_count) / cfg.ny;
-            const size_t idx = (static_cast<size_t>(z) * static_cast<size_t>(cfg.ny) + static_cast<size_t>(y)) * static_cast<size_t>(cfg.nx);
-            expect_true(state.porosity[idx] == cfg.rock.layer_porosity[static_cast<size_t>(layer)], "layered porosity assignment");
-            expect_true(state.permeability_md[idx] == cfg.rock.layer_permeability_md[static_cast<size_t>(layer)], "layered permeability assignment");
-        }
-    }
-}
-
 }  // namespace
 
 int main() {
     test_valid_state_initialization();
     test_invalid_state_configs();
     test_invariant_validation();
-    test_layered_state_initialization();
     std::cout << "state_init_tests: PASS\n";
     return 0;
 }

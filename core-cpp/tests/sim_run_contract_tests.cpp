@@ -21,13 +21,13 @@ std::string fixture_case_path() {
     return std::string(root) + "/core-cpp/tests/fixtures/valid_case.yaml";
 }
 
-std::string fixture_layered_case_path() {
+std::string fixture_3d_case_path() {
     const char* root = std::getenv("RESERV_ML_REPO_ROOT");
     if (root == nullptr) {
         std::cerr << "RESERV_ML_REPO_ROOT not set\n";
         std::exit(1);
     }
-    return std::string(root) + "/core-cpp/tests/fixtures/layered_case.yaml";
+    return std::string(root) + "/core-cpp/tests/fixtures/valid_3d_case.yaml";
 }
 
 std::string shell_quote(const std::string& raw) {
@@ -246,7 +246,7 @@ void test_3d_case_writes_rank4_state_arrays(const fs::path& build_dir) {
 
     const std::string cmd =
         shell_quote(sim_run.string()) +
-        " --case " + shell_quote(fixture_layered_case_path()) +
+        " --case " + shell_quote(fixture_3d_case_path()) +
         " --backend cpu --steps 4 --output-every 2 --out " + shell_quote(out_dir.string()) +
         " > /dev/null 2>&1";
     expect_true(command_exit_code(run_command(cmd)) == 0, "3d sim_run returns success");

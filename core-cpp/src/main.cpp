@@ -252,7 +252,6 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
          << "  \"nx\": " << cfg.nx << ",\n"
          << "  \"ny\": " << cfg.ny << ",\n"
          << "  \"nz\": " << cfg.nz << ",\n"
-         << "  \"rock_layer_count\": " << cfg.rock.layer_count << ",\n"
          << "  \"backend\": \"" << args.backend << "\",\n"
          << "  \"dt_policy\": \"" << json_escape(cfg.dt_policy) << "\",\n"
          << "  \"units\": \"" << json_escape(cfg.units) << "\",\n"
