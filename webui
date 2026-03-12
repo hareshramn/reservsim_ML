@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./webui [--host 127.0.0.1] [--port 8765]
+  ./webui [--host 0.0.0.0] [--port 8770]
 
 Launch the browser-based workflow UI.
 Advanced CLI workflows remain available via:

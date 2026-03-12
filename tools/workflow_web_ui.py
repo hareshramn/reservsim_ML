@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import errno
 import html
 import json
 import mimetypes
@@ -57,6 +58,27 @@ MODE_SPECS = {
         {"key": "steps", "label": "Steps", "kind": "text", "default": "200"},
         {"key": "output_every", "label": "Output Every", "kind": "text", "default": "1"},
         {"key": "keep_temp", "label": "Keep Temp", "kind": "bool"},
+    ],
+    "ml-train": [
+        {"key": "model", "label": "Model", "kind": "enum", "required": True},
+        {"key": "data", "label": "Data Dir (optional)", "kind": "text"},
+        {"key": "config", "label": "Config YAML (optional)", "kind": "text"},
+        {"key": "seed", "label": "Seed", "kind": "text", "default": "42"},
+        {"key": "out", "label": "Out Dir (optional)", "kind": "text"},
+    ],
+    "ml-eval": [
+        {"key": "checkpoint", "label": "Checkpoint (.npz)", "kind": "text", "required": True},
+        {"key": "case", "label": "Run Dir or Case YAML", "kind": "text", "required": True},
+        {"key": "horizons", "label": "Horizons", "kind": "text", "default": "20,50,100"},
+        {"key": "out", "label": "Out Dir", "kind": "text", "default": "surrogate_eval"},
+    ],
+    "ml-predict": [
+        {"key": "checkpoint", "label": "Checkpoint (.npz)", "kind": "text", "required": True},
+        {"key": "run", "label": "Run Dir/ID (optional)", "kind": "text"},
+        {"key": "step", "label": "Step", "kind": "text", "default": "0"},
+        {"key": "pressure", "label": "Pressure NPY (optional)", "kind": "text"},
+        {"key": "sw", "label": "Sw NPY (optional)", "kind": "text"},
+        {"key": "out", "label": "Out Dir", "kind": "text", "default": "surrogate_predict"},
     ],
     "ml-check": [
         {"key": "model", "label": "Model", "kind": "enum", "required": True},
@@ -113,6 +135,15 @@ ARG_FLAG = {
     "case_file": "--case-file",
     "out": "--out",
     "plan": "--plan",
+    "data": "--data",
+    "config": "--config",
+    "seed": "--seed",
+    "checkpoint": "--checkpoint",
+    "case": "--case",
+    "horizons": "--horizons",
+    "pressure": "--pressure",
+    "sw": "--sw",
+    "step": "--step",
     "keep_temp": "--keep-temp",
     "bench_repeats": "--bench-repeats",
     "bench_steps": "--bench-steps",
@@ -216,7 +247,7 @@ HTML = """<!doctype html>
     }
     .input-row {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr auto auto;
       gap: 8px;
       align-items: center;
     }
@@ -358,6 +389,36 @@ HTML = """<!doctype html>
       justify-content: flex-end;
       flex-wrap: wrap;
     }
+    .editor-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .editor-backdrop[hidden] { display: none; }
+    .editor {
+      width: min(980px, 100%);
+      max-height: 86vh;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .editor textarea {
+      width: 100%;
+      min-height: 360px;
+      font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      resize: vertical;
+    }
     @media (max-width: 780px) {
       .grid { grid-template-columns: 1fr; }
       label { margin-top: 6px; }
@@ -380,7 +441,7 @@ HTML = """<!doctype html>
       <div class="preview" id="preview"></div>
       <div class="result-panel" id="summary-panel" hidden>
         <div class="panel-head">
-          <h3>Adhoc Run Summary</h3>
+          <h3>Run Summary</h3>
           <button class="copy" id="summary-visualize-btn" type="button">Visualize</button>
         </div>
         <div id="summary-content"></div>
@@ -399,32 +460,59 @@ HTML = """<!doctype html>
       </div>
     </div>
   </div>
+  <div class="editor-backdrop" id="csv-editor" hidden>
+    <div class="editor">
+      <div class="picker-path" id="csv-editor-path"></div>
+      <textarea id="csv-editor-text"></textarea>
+      <div class="picker-actions">
+        <button class="copy" id="csv-editor-cancel-btn">Cancel</button>
+        <button class="run" id="csv-editor-save-btn">Save CSV</button>
+      </div>
+    </div>
+  </div>
   <script>
     const MODE_SPECS = __MODE_SPECS__;
     const ARG_FLAG = __ARG_FLAG__;
     const COMMAND_KEY = "__command";
     const RUN_KIND_KEY = "__run_kind";
-    const COMMAND_CHOICES = ["run", "ml-check", "validate", "clean", "parity"];
-    const RUN_KIND_TO_MODE = { "adhoc": "run", "ml-data-gen": "ml-data-gen", "benchmark": "bench" };
+    const ML_KIND_KEY = "__ml_kind";
+    const COMMAND_CHOICES = ["run", "machine-learning", "validate", "clean", "parity"];
+    const RUN_KIND_TO_MODE = { "adhoc": "run", "benchmark": "bench" };
     const RUN_KIND_CHOICES = Object.keys(RUN_KIND_TO_MODE);
+    const ML_KIND_TO_MODE = {
+      "data-generation": "ml-data-gen",
+      "training": "ml-train",
+      "evaluate": "ml-eval",
+      "predict": "ml-predict",
+      "full-check": "ml-check",
+    };
+    const ML_KIND_CHOICES = Object.keys(ML_KIND_TO_MODE);
     const COMMAND_LABELS = {
       "run": "Run",
-      "ml-check": "Ml check",
+      "machine-learning": "Machine Learning",
       "validate": "Validate",
       "clean": "Clean",
       "parity": "CPU-GPU values check",
     };
     const RUN_KIND_LABELS = {
       "adhoc": "Adhoc",
-      "ml-data-gen": "Ml data gen",
       "benchmark": "Benchmark",
+    };
+    const ML_KIND_LABELS = {
+      "data-generation": "Data Generation",
+      "training": "Training",
+      "evaluate": "Evaluate",
+      "predict": "Predict",
+      "full-check": "Full ML Check",
     };
 
     let models = [];
     const state = {};
     const pickerState = { targetKey: "", path: "", parent: null };
+    const csvEditorState = { path: "" };
     let lastRunDir = "";
     let progressTimer = null;
+    let ensuredMlPlanModel = "";
 
     function q(id) { return document.getElementById(id); }
     function esc(s) { return String(s).replaceAll('"', '\\"'); }
@@ -446,6 +534,77 @@ HTML = """<!doctype html>
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Failed to load directories.");
       return j;
+    }
+
+    async function ensureMlPlanDefault(model) {
+      const r = await fetch(`/api/ml-plan-default?model=${encodeURIComponent(model)}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Failed to resolve default ML plan.");
+      return j;
+    }
+
+    async function maybeEnsureMlPlan() {
+      if (selectedMode() !== "ml-data-gen") return;
+      const model = String(state.model || "").trim();
+      if (!model) return;
+      const desired = `cases/${model}/ml_scenarios.csv`;
+      if (!String(state.plan || "").trim()) state.plan = desired;
+      if (ensuredMlPlanModel === model) return;
+      const info = await ensureMlPlanDefault(model);
+      ensuredMlPlanModel = model;
+      const path = String(info.path || desired);
+      const changed = state.plan !== path;
+      state.plan = path;
+      if (changed) {
+        buildForm();
+        return;
+      }
+      if (info.created) {
+        setRunStatus(`Created default Plan CSV: ${path}`, "ok");
+      }
+    }
+
+    async function openPlanCsvEditor() {
+      try {
+        if (selectedMode() !== "ml-data-gen") return;
+        const model = String(state.model || "").trim();
+        if (!model) throw new Error("Select a model first.");
+        const info = await ensureMlPlanDefault(model);
+        const planPath = String(info.path || "").trim();
+        if (!planPath) throw new Error("Default plan path is empty.");
+        state.plan = planPath;
+        const r = await fetch(`/api/ml-plan?path=${encodeURIComponent(planPath)}`);
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Failed to load plan CSV.");
+        csvEditorState.path = String(j.path || planPath);
+        q("csv-editor-path").textContent = csvEditorState.path;
+        q("csv-editor-text").value = String(j.content || "");
+        q("csv-editor").hidden = false;
+        updatePreview();
+      } catch (e) {
+        alert(e.message || "Failed to open plan CSV editor.");
+      }
+    }
+
+    async function savePlanCsvEditor() {
+      try {
+        const path = String(csvEditorState.path || "").trim();
+        if (!path) throw new Error("No CSV path selected.");
+        const content = q("csv-editor-text").value;
+        const r = await fetch("/api/ml-plan-save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path, content }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Failed to save plan CSV.");
+        q("csv-editor").hidden = true;
+        state.plan = String(j.path || path);
+        setRunStatus(`Saved Plan CSV: ${state.plan}`, "ok");
+        buildForm();
+      } catch (e) {
+        alert(e.message || "Failed to save plan CSV.");
+      }
     }
 
     async function runDoctorCheck() {
@@ -485,6 +644,10 @@ HTML = """<!doctype html>
         const runKind = state[RUN_KIND_KEY] || "adhoc";
         return RUN_KIND_TO_MODE[runKind] || "run";
       }
+      if (command === "machine-learning") {
+        const mlKind = state[ML_KIND_KEY] || "data-generation";
+        return ML_KIND_TO_MODE[mlKind] || "ml-data-gen";
+      }
       return command;
     }
 
@@ -493,6 +656,7 @@ HTML = """<!doctype html>
       grid.innerHTML = "";
       const commandSpec = { key: COMMAND_KEY, label: "Command", kind: "enum", choices: COMMAND_CHOICES };
       const runKindSpec = { key: RUN_KIND_KEY, label: "Run Type", kind: "enum", choices: RUN_KIND_CHOICES, default: "adhoc" };
+      const mlKindSpec = { key: ML_KIND_KEY, label: "ML Workflow", kind: "enum", choices: ML_KIND_CHOICES, default: "data-generation" };
 
       if (state[COMMAND_KEY] === undefined) state[COMMAND_KEY] = "";
       if (state[COMMAND_KEY] && !COMMAND_CHOICES.includes(state[COMMAND_KEY])) {
@@ -504,6 +668,10 @@ HTML = """<!doctype html>
       if (state[COMMAND_KEY] === "run") {
         if (state[RUN_KIND_KEY] === undefined) state[RUN_KIND_KEY] = "adhoc";
         specs.push(runKindSpec);
+      }
+      if (state[COMMAND_KEY] === "machine-learning") {
+        if (state[ML_KIND_KEY] === undefined) state[ML_KIND_KEY] = "data-generation";
+        specs.push(mlKindSpec);
       }
       if (mode) specs.push(...(MODE_SPECS[mode] || []));
       for (const spec of specs) {
@@ -548,6 +716,8 @@ HTML = """<!doctype html>
               o.textContent = COMMAND_LABELS[c] || c;
             } else if (spec.key === RUN_KIND_KEY) {
               o.textContent = RUN_KIND_LABELS[c] || c;
+            } else if (spec.key === ML_KIND_KEY) {
+              o.textContent = ML_KIND_LABELS[c] || c;
             } else {
               o.textContent = c;
             }
@@ -556,13 +726,23 @@ HTML = """<!doctype html>
           sel.value = spec.key === COMMAND_KEY ? (state[spec.key] || "") : (state[spec.key] || defaultFor(spec));
           sel.onchange = () => {
             state[spec.key] = sel.value;
-            if (spec.key === COMMAND_KEY || spec.key === RUN_KIND_KEY) {
+            if (spec.key === COMMAND_KEY || spec.key === RUN_KIND_KEY || spec.key === ML_KIND_KEY) {
+              if (spec.key === COMMAND_KEY || spec.key === ML_KIND_KEY) ensuredMlPlanModel = "";
               for (const k of Object.keys(state)) {
-                if (k !== COMMAND_KEY && k !== RUN_KIND_KEY) delete state[k];
+                if (k !== COMMAND_KEY && k !== RUN_KIND_KEY && k !== ML_KIND_KEY) delete state[k];
               }
               buildForm();
             } else {
+              if (spec.key === "model" && selectedMode() === "ml-data-gen") {
+                ensuredMlPlanModel = "";
+                state.plan = "";
+                buildForm();
+                return;
+              }
               updatePreview();
+              if (spec.key === "model" || spec.key === "plan") {
+                void maybeEnsureMlPlan().catch((e) => setRunStatus(`Plan setup failed: ${e.message || e}`, "warn"));
+              }
             }
           };
           grid.appendChild(sel);
@@ -570,7 +750,8 @@ HTML = """<!doctype html>
           inp.type = "text";
           inp.value = state[spec.key] || "";
           inp.oninput = () => { state[spec.key] = inp.value; updatePreview(); };
-          const needsFolderPicker = spec.key === "out" && (mode === "run" || mode === "plot");
+          const PICKER_KEYS = new Set(["out", "run", "case", "data", "plan", "cpu_run", "gpu_run"]);
+          const needsFolderPicker = PICKER_KEYS.has(spec.key);
           if (needsFolderPicker) {
             const row = document.createElement("div");
             row.className = "input-row";
@@ -581,6 +762,14 @@ HTML = """<!doctype html>
             browse.textContent = "Browse";
             browse.onclick = async () => { await openDirPicker(spec.key); };
             row.appendChild(browse);
+            if (mode === "ml-data-gen" && spec.key === "plan") {
+              const edit = document.createElement("button");
+              edit.type = "button";
+              edit.className = "copy";
+              edit.textContent = "Edit CSV";
+              edit.onclick = async () => { await openPlanCsvEditor(); };
+              row.appendChild(edit);
+            }
             grid.appendChild(row);
           } else {
             grid.appendChild(inp);
@@ -588,13 +777,22 @@ HTML = """<!doctype html>
         }
       }
       updatePreview();
+      void maybeEnsureMlPlan().catch((e) => setRunStatus(`Plan setup failed: ${e.message || e}`, "warn"));
     }
 
     async function openDirPicker(targetKey) {
       pickerState.targetKey = targetKey;
       pickerState.path = "/";
       const raw = String(state[targetKey] || "").trim();
-      if (raw && raw !== "auto") pickerState.path = raw;
+      if (raw && raw !== "auto") {
+        // For file fields (for example plan.csv), open the parent directory.
+        if (raw.endsWith(".csv") || raw.endsWith(".yaml") || raw.endsWith(".yml") || raw.endsWith(".json")) {
+          const slash = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\\\"));
+          pickerState.path = slash > 0 ? raw.slice(0, slash) : "/";
+        } else {
+          pickerState.path = raw;
+        }
+      }
       try {
         const data = await loadDirs(pickerState.path);
         renderDirPicker(data);
@@ -648,6 +846,39 @@ HTML = """<!doctype html>
     }
 
     function cmdText(payload) {
+      if (payload.mode === "ml-train") {
+        const model = String(payload.args.model || "").trim();
+        const data = String(payload.args.data || `cases/${model}/outputs/ml-data`).trim();
+        const config = String(payload.args.config || `cases/${model}/surrogate_config.yaml`).trim();
+        const out = String(payload.args.out || `cases/${model}/outputs/surrogate-train`).trim();
+        const seed = String(payload.args.seed || "42").trim();
+        return [
+          "python3",
+          "python/ml/train_surrogate.py",
+          "--data", data,
+          "--config", config,
+          "--seed", seed,
+          "--out", out,
+        ].map(shquote).join(" ");
+      }
+      if (payload.mode === "ml-eval") {
+        const parts = ["python3", "python/ml/eval_surrogate.py"];
+        for (const [k, v] of Object.entries(payload.args)) {
+          const f = ARG_FLAG[k];
+          if (!f) continue;
+          parts.push(f, String(v));
+        }
+        return parts.map(shquote).join(" ");
+      }
+      if (payload.mode === "ml-predict") {
+        const parts = ["python3", "python/ml/predict_surrogate.py"];
+        for (const [k, v] of Object.entries(payload.args)) {
+          const f = ARG_FLAG[k];
+          if (!f) continue;
+          parts.push(f, String(v));
+        }
+        return parts.map(shquote).join(" ");
+      }
       const parts = ["./workflow", payload.mode];
       for (const [k, v] of Object.entries(payload.args)) {
         const f = ARG_FLAG[k];
@@ -889,6 +1120,8 @@ HTML = """<!doctype html>
       q("summary-visualize-btn").onclick = visualizeLastRun;
       q("summary-visualize-btn").disabled = true;
       q("picker-cancel-btn").onclick = () => { q("dir-picker").hidden = true; };
+      q("csv-editor-cancel-btn").onclick = () => { q("csv-editor").hidden = true; };
+      q("csv-editor-save-btn").onclick = savePlanCsvEditor;
       q("picker-up-btn").onclick = async () => {
         if (!pickerState.parent) return;
         try {
@@ -939,9 +1172,127 @@ def list_dirs(path_arg: str) -> dict[str, object]:
     return {"path": str(current), "parent": parent, "dirs": dirs}
 
 
+def resolve_repo_path(path_arg: str) -> Path:
+    if not path_arg.strip():
+        raise ValueError("Path cannot be empty.")
+    raw = Path(path_arg).expanduser()
+    target = raw if raw.is_absolute() else (ROOT / raw)
+    resolved = target.resolve()
+    root_resolved = ROOT.resolve()
+    if resolved != root_resolved and root_resolved not in resolved.parents:
+        raise ValueError("Invalid path outside repository.")
+    return resolved
+
+
+def repo_rel(path_obj: Path) -> str:
+    try:
+        return path_obj.resolve().relative_to(ROOT.resolve()).as_posix()
+    except Exception:
+        return str(path_obj.resolve())
+
+
+def default_ml_plan_content() -> str:
+    return (
+        "tag,injector_rate_stb_day,producer_bhp_psi,rock.permeability_md\n"
+        "train-a,80.0,2800.0,100.0\n"
+        "train-b,120.0,2600.0,150.0\n"
+        "eval-a,100.0,2700.0,120.0\n"
+    )
+
+
+def ensure_default_ml_plan(model: str) -> tuple[Path, bool]:
+    model_name = model.strip()
+    if not model_name:
+        raise ValueError("Model is required.")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", model_name):
+        raise ValueError(f"Invalid model name: {model_name}")
+    model_dir = ROOT / "cases" / model_name
+    model_yaml = model_dir / "model.yaml"
+    if not model_yaml.exists():
+        raise ValueError(f"Model not found: {model_name}")
+    plan_path = model_dir / "ml_scenarios.csv"
+    created = False
+    if not plan_path.exists():
+        plan_path.write_text(default_ml_plan_content(), encoding="utf-8")
+        created = True
+    return plan_path.resolve(), created
+
+
+def python_exec() -> str:
+    venv_py = ROOT / ".venv" / "bin" / "python"
+    if venv_py.exists():
+        return str(venv_py)
+    return "python3"
+
+
 def build_cli(mode: str, args: dict[str, object]) -> list[str]:
     if mode not in MODE_SPECS:
         raise ValueError(f"Unsupported mode: {mode}")
+    if mode == "ml-train":
+        model = str(args.get("model", "")).strip()
+        if not model:
+            raise ValueError("Missing required field: Model")
+        data = str(args.get("data", "")).strip() or str(ROOT / "cases" / model / "outputs" / "ml-data")
+        config = str(args.get("config", "")).strip() or str(ROOT / "cases" / model / "surrogate_config.yaml")
+        seed = str(args.get("seed", "")).strip() or "42"
+        out = str(args.get("out", "")).strip() or str(ROOT / "cases" / model / "outputs" / "surrogate-train")
+        return [
+            python_exec(),
+            str(ROOT / "python" / "ml" / "train_surrogate.py"),
+            "--data",
+            data,
+            "--config",
+            config,
+            "--seed",
+            seed,
+            "--out",
+            out,
+        ]
+    if mode == "ml-eval":
+        checkpoint = str(args.get("checkpoint", "")).strip()
+        case = str(args.get("case", "")).strip()
+        horizons = str(args.get("horizons", "")).strip() or "20,50,100"
+        out = str(args.get("out", "")).strip() or "surrogate_eval"
+        if not checkpoint:
+            raise ValueError("Missing required field: Checkpoint (.npz)")
+        if not case:
+            raise ValueError("Missing required field: Run Dir or Case YAML")
+        return [
+            python_exec(),
+            str(ROOT / "python" / "ml" / "eval_surrogate.py"),
+            "--checkpoint",
+            checkpoint,
+            "--case",
+            case,
+            "--horizons",
+            horizons,
+            "--out",
+            out,
+        ]
+    if mode == "ml-predict":
+        checkpoint = str(args.get("checkpoint", "")).strip()
+        out = str(args.get("out", "")).strip() or "surrogate_predict"
+        run_arg = str(args.get("run", "")).strip()
+        pressure = str(args.get("pressure", "")).strip()
+        sw = str(args.get("sw", "")).strip()
+        step = str(args.get("step", "")).strip() or "0"
+        if not checkpoint:
+            raise ValueError("Missing required field: Checkpoint (.npz)")
+        if not run_arg and not (pressure and sw):
+            raise ValueError("Provide either Run Dir/ID, or both Pressure NPY and Sw NPY.")
+        cmd = [
+            python_exec(),
+            str(ROOT / "python" / "ml" / "predict_surrogate.py"),
+            "--checkpoint",
+            checkpoint,
+            "--out",
+            out,
+        ]
+        if run_arg:
+            cmd.extend(["--run", run_arg, "--step", step])
+        else:
+            cmd.extend(["--pressure", pressure, "--sw", sw])
+        return cmd
     cmd = [str(WORKFLOW), mode]
     for spec in MODE_SPECS[mode]:
         key = spec["key"]
@@ -1454,6 +1805,29 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json({"error": str(exc)}, code=HTTPStatus.BAD_REQUEST)
             return
+        if path == "/api/ml-plan-default":
+            try:
+                model = qs.get("model", [""])[0]
+                plan_path, created = ensure_default_ml_plan(model)
+                self._json({"path": repo_rel(plan_path), "created": created})
+            except Exception as exc:
+                self._json({"error": str(exc)}, code=HTTPStatus.BAD_REQUEST)
+            return
+        if path == "/api/ml-plan":
+            try:
+                path_arg = qs.get("path", [""])[0]
+                if not path_arg:
+                    raise ValueError("Missing required query param: path")
+                file_path = resolve_repo_path(path_arg)
+                if not file_path.exists():
+                    raise ValueError(f"File not found: {file_path}")
+                if not file_path.is_file():
+                    raise ValueError(f"Not a file: {file_path}")
+                content = file_path.read_text(encoding="utf-8")
+                self._json({"path": repo_rel(file_path), "content": content})
+            except Exception as exc:
+                self._json({"error": str(exc)}, code=HTTPStatus.BAD_REQUEST)
+            return
         if path == "/visuals":
             try:
                 run_dir = qs.get("run_dir", [""])[0].strip()
@@ -1472,10 +1846,7 @@ class Handler(BaseHTTPRequestHandler):
                 rel = qs.get("path", [""])[0]
                 if not rel:
                     raise ValueError("Missing required query param: path")
-                file_path = (ROOT / rel).resolve()
-                root_resolved = ROOT.resolve()
-                if root_resolved not in file_path.parents and file_path != root_resolved:
-                    raise ValueError("Invalid file path")
+                file_path = resolve_repo_path(rel)
                 if not file_path.is_file():
                     raise ValueError(f"File not found: {file_path}")
                 data = file_path.read_bytes()
@@ -1491,11 +1862,41 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"error": "not found"}, code=HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path not in {"/api/run", "/api/visualize"}:
+        if self.path not in {"/api/run", "/api/visualize", "/api/ml-plan-save"}:
             self._json({"error": "not found"}, code=HTTPStatus.NOT_FOUND)
             return
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length)
+        if self.path == "/api/ml-plan-save":
+            try:
+                req = json.loads(raw.decode("utf-8"))
+                path_arg = str(req.get("path", "")).strip()
+                content = str(req.get("content", ""))
+                if not path_arg:
+                    raise ValueError("Missing required field: path")
+                file_path = resolve_repo_path(path_arg)
+                if file_path.suffix.lower() != ".csv":
+                    raise ValueError("Plan editor only supports CSV files.")
+                parent = file_path.parent
+                parent.mkdir(parents=True, exist_ok=True)
+                header_line = ""
+                for line in content.splitlines():
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#"):
+                        continue
+                    header_line = stripped
+                    break
+                if not header_line:
+                    raise ValueError("CSV must include a header line.")
+                cols = [c.strip() for c in header_line.split(",")]
+                if "tag" not in cols:
+                    raise ValueError("CSV header must include a 'tag' column.")
+                normalized = content if content.endswith("\n") else (content + "\n")
+                file_path.write_text(normalized, encoding="utf-8")
+                self._json({"path": repo_rel(file_path), "saved": True})
+            except Exception as exc:
+                self._json({"error": str(exc)}, code=HTTPStatus.BAD_REQUEST)
+            return
         if self.path == "/api/visualize":
             try:
                 req = json.loads(raw.decode("utf-8"))
@@ -1546,9 +1947,21 @@ class Handler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run local web UI for workflow commands.")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", default=8765, type=int, help="Bind port (default: 8765)")
+    parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    parser.add_argument("--port", default=8770, type=int, help="Bind port (default: 8770)")
     return parser.parse_args()
+
+
+def create_server(host: str, port: int) -> tuple[ThreadingHTTPServer, int]:
+    # If the default port is busy, scan a short range so users can still start the UI.
+    for candidate in range(port, port + 20):
+        try:
+            return ThreadingHTTPServer((host, candidate), Handler), candidate
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                continue
+            raise
+    raise OSError(errno.EADDRINUSE, f"No free port found in range {port}-{port + 19}")
 
 
 def main() -> int:
@@ -1556,8 +1969,10 @@ def main() -> int:
     if not WORKFLOW.exists():
         print(f"workflow script not found: {WORKFLOW}")
         return 2
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Workflow web UI running at http://{args.host}:{args.port}")
+    server, bound_port = create_server(args.host, args.port)
+    if bound_port != args.port:
+        print(f"Requested port {args.port} is busy; using {bound_port} instead.")
+    print(f"Workflow web UI running at http://{args.host}:{bound_port}")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()

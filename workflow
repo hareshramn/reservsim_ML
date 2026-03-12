@@ -18,7 +18,7 @@ Commands:
   ui
       Launch a local GUI for selecting workflow mode and command arguments.
 
-  web-ui [--host 127.0.0.1] [--port 8765]
+  web-ui [--host 0.0.0.0] [--port 8770]
       Launch a browser-based local UI for selecting mode and arguments.
 
   gpu-check --model <modelN> [gpu-check options]
@@ -158,9 +158,9 @@ case "$cmd" in
 
   web-ui)
     if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
-      exec "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/tools/workflow_web_ui.py" "$@"
+      exec env PYTHONUNBUFFERED=1 "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/tools/workflow_web_ui.py" "$@"
     fi
-    exec python3 "$ROOT_DIR/tools/workflow_web_ui.py" "$@"
+    exec env PYTHONUNBUFFERED=1 python3 "$ROOT_DIR/tools/workflow_web_ui.py" "$@"
     ;;
 
   gpu-check)
