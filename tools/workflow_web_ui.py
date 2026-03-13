@@ -938,6 +938,9 @@ HTML = """<!doctype html>
       }
       const timing = summary.timing || {};
       const last = summary.step_last || {};
+      const history = summary.history || null;
+      const historyGroups = Array.isArray(summary.history_groups) ? summary.history_groups : [];
+      const historyRows = Array.isArray(summary.history_rows) ? summary.history_rows : [];
       const cards = [
         ["Run ID", simplifyRunId(summary.run_id || "")],
         ["Backend", summary.backend || ""],
@@ -945,17 +948,44 @@ HTML = """<!doctype html>
         ["Checkpoints", summary.checkpoints_written || 0],
         ["Total Time (s)", fmtNum(timing.total_time_s, 6)],
         ["Avg Step Time (s)", fmtNum(timing.avg_step_time_s, 6)],
+        ["Sim Day", fmtNum(last.simulation_day, 4)],
+        ["Last dt (days)", fmtNum(last.dt_days, 6)],
         ["Pressure Avg", fmtNum(last.pressure_avg, 4)],
         ["Sw Avg", fmtNum(last.sw_avg, 6)],
         ["Mass Balance Rel", fmtNum(last.mass_balance_rel, 8)],
       ];
+      const historyOverview = history
+        ? `<div class="kv-grid">
+             <div class="kv"><div class="k">History Objective</div><div class="v">${fmtNum(history.objective_value, 6)}</div></div>
+             <div class="kv"><div class="k">Compare Count</div><div class="v">${history.compare_count || 0}</div></div>
+             <div class="kv"><div class="k">Objective Name</div><div class="v mono">${history.objective_name || ""}</div></div>
+           </div>`
+        : "";
+      const historyGroupsHtml = historyGroups.length
+        ? [
+            '<div style="margin-top:10px"><h3 style="margin:0 0 8px 0;font-size:15px">Top Mismatch Groups</h3>',
+            '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #dbe3ea;border-radius:8px;overflow:hidden">',
+            '<thead><tr style="background:#f1f5f9"><th style="text-align:left;padding:8px">Well</th><th style="text-align:left;padding:8px">Observable</th><th style="text-align:right;padding:8px">RMSE</th><th style="text-align:right;padding:8px">Weighted Misfit</th></tr></thead><tbody>',
+            ...historyGroups.map((row) => `<tr><td style="padding:8px;border-top:1px solid #e5e7eb">${row.well || ""}</td><td style="padding:8px;border-top:1px solid #e5e7eb">${row.observable || ""}</td><td style="padding:8px;border-top:1px solid #e5e7eb;text-align:right">${fmtNum(row.rmse, 6)}</td><td style="padding:8px;border-top:1px solid #e5e7eb;text-align:right">${fmtNum(row.weighted_misfit, 6)}</td></tr>`),
+            '</tbody></table></div></div>',
+          ].join("")
+        : "";
+      const historyRowsHtml = historyRows.length
+        ? [
+            '<div style="margin-top:10px"><h3 style="margin:0 0 8px 0;font-size:15px">Largest Point Errors</h3>',
+            '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #dbe3ea;border-radius:8px;overflow:hidden">',
+            '<thead><tr style="background:#f1f5f9"><th style="text-align:left;padding:8px">Day</th><th style="text-align:left;padding:8px">Well</th><th style="text-align:left;padding:8px">Observable</th><th style="text-align:right;padding:8px">Observed</th><th style="text-align:right;padding:8px">Simulated</th><th style="text-align:right;padding:8px">Weighted Error</th></tr></thead><tbody>',
+            ...historyRows.map((row) => `<tr><td style="padding:8px;border-top:1px solid #e5e7eb">${fmtNum(row.day, 4)}</td><td style="padding:8px;border-top:1px solid #e5e7eb">${row.well || ""}</td><td style="padding:8px;border-top:1px solid #e5e7eb">${row.observable || ""}</td><td style="padding:8px;border-top:1px solid #e5e7eb;text-align:right">${fmtNum(row.observed_value, 6)}</td><td style="padding:8px;border-top:1px solid #e5e7eb;text-align:right">${fmtNum(row.simulated_value, 6)}</td><td style="padding:8px;border-top:1px solid #e5e7eb;text-align:right">${fmtNum(row.weighted_error, 6)}</td></tr>`),
+            '</tbody></table></div></div>',
+          ].join("")
+        : "";
       const html = [
         '<div class="kv-grid">',
         ...cards.map(([k, v]) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`),
         "</div>",
-        summary.history
-          ? `<div class="kv-grid"><div class="kv"><div class="k">History Objective</div><div class="v">${fmtNum(summary.history.objective_value, 6)}</div></div><div class="kv"><div class="k">Compare Count</div><div class="v">${summary.history.compare_count || 0}</div></div></div>`
-          : "",
+        historyOverview,
+        historyGroupsHtml,
+        historyRowsHtml,
         `<div class="mono">Run directory: ${summary.run_dir || ""}</div>`,
       ].join("");
       content.innerHTML = html;
@@ -1480,6 +1510,7 @@ def build_run_summary(run_dir: Path) -> dict[str, object]:
         step_last = {
             "step_idx": int(_float(last.get("step_idx"), 0.0)),
             "dt_days": _float(last.get("dt_days")),
+            "simulation_day": _float(last.get("simulation_day")),
             "pressure_avg": _float(last.get("pressure_avg")),
             "sw_avg": _float(last.get("sw_avg")),
             "mass_balance_rel": _float(last.get("mass_balance_rel")),
@@ -1494,6 +1525,35 @@ def build_run_summary(run_dir: Path) -> dict[str, object]:
     total_io = sum(_float(r.get("io_time_s")) for r in step_timing)
     total_time = sum(_float(r.get("total_time_s")) for r in step_timing)
     count = len(step_timing)
+
+    history_summary_rows = _load_csv_rows(run_dir / "well_observed_vs_simulated.csv")
+    history_detail_rows = _load_csv_rows(run_dir / "history_match.csv")
+    top_history_groups: list[dict[str, object]] = []
+    for row in history_summary_rows:
+        top_history_groups.append(
+            {
+                "well": str(row.get("well", "")),
+                "observable": str(row.get("observable", "")),
+                "rmse": _float(row.get("rmse")),
+                "mae": _float(row.get("mae")),
+                "weighted_misfit": _float(row.get("weighted_misfit")),
+            }
+        )
+    top_history_groups.sort(key=lambda r: float(r.get("weighted_misfit", 0.0)), reverse=True)
+
+    top_history_rows: list[dict[str, object]] = []
+    for row in history_detail_rows:
+        top_history_rows.append(
+            {
+                "day": _float(row.get("day")),
+                "well": str(row.get("well", "")),
+                "observable": str(row.get("observable", "")),
+                "observed_value": _float(row.get("observed_value")),
+                "simulated_value": _float(row.get("simulated_value")),
+                "weighted_error": _float(row.get("weighted_error")),
+            }
+        )
+    top_history_rows.sort(key=lambda r: float(r.get("weighted_error", 0.0)), reverse=True)
 
     return {
         "run_dir": str(run_dir),
@@ -1515,6 +1575,8 @@ def build_run_summary(run_dir: Path) -> dict[str, object]:
             if (run_dir / "history_mismatch.json").exists()
             else None
         ),
+        "history_groups": top_history_groups[:4],
+        "history_rows": top_history_rows[:5],
     }
 
 
