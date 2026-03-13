@@ -15,7 +15,7 @@ Deliver a focused mini-project in 2 weeks that demonstrates:
 - 2D structured-grid IMPES formulation (oil-water, immiscible, incompressible).
 - CPU baseline for history-run style replay under known controls.
 - Observed-vs-simulated response comparison and mismatch reporting.
-- ML surrogate plan aimed at accelerating history matching.
+- ML ranker plan aimed at accelerating history matching.
 - Reproducible documentation and benchmark artifacts.
 - Browser-first workflow entrypoint with CLI fallback for advanced/manual runs.
 
@@ -42,7 +42,7 @@ Deliver a focused mini-project in 2 weeks that demonstrates:
 2. History-mode evidence:
    - observed-vs-simulated comparison artifacts defined,
    - mismatch metrics reproducible.
-3. ML surrogate evidence:
+3. ML-assisted history-matching evidence:
    - clearly scoped role in history matching,
    - measurable potential to reduce expensive simulator evaluations.
 4. Portfolio packaging:

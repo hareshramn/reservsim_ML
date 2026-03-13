@@ -22,7 +22,7 @@ fi
 
 set +e
 run_output="$(
-  RESERV_OUTPUT_BUCKET=history "$ROOT_DIR/tools/model_run.sh" "$@" 2>&1
+  RESERV_OUTPUT_BUCKET="${RESERV_OUTPUT_BUCKET:-history}" "$ROOT_DIR/tools/model_run.sh" "$@" 2>&1
 )"
 rc=$?
 set -e

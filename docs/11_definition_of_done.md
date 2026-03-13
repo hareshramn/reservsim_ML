@@ -15,7 +15,7 @@
    - numeric tolerances for pressure residual, mass-balance, and retry budget.
 7. Execution sequencing is respected:
    - CPU correctness and artifact reproducibility first,
-   - surrogate data/training/evaluation second,
+   - history-match ML data/training/evaluation second,
    - GPU parity and optimization evidence last.
 
 ## Quality Bar by Artifact

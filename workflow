@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="python3"
+if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+fi
 
 usage() {
   cat <<'USAGE'
@@ -35,15 +39,26 @@ Commands:
       History-run options: --mode --backend --steps --output-every --out --gpu-init-retries --tag --case-file
 
   ml-data-gen --model <modelN> [ml-data-gen options]
-      Generate ML-data runs from temporary case YAML variants.
+      Generate history-match candidate runs and a tabular ML dataset.
       ml-data-gen options: --plan --mode --backend --steps --output-every --gpu-init-retries --keep-temp
 
+  ml-train --model <modelN> [ml-train options]
+      Train a history-match ML ranker on the generated candidate dataset.
+      ml-train options: --data --config --seed --out
+
+  ml-eval --model <modelN> [ml-eval options]
+      Evaluate a trained history-match ML ranker on held-out candidate rows.
+      ml-eval options: --checkpoint --data --out
+
+  ml-score --model <modelN> [ml-score options]
+      Score candidate parameter rows and rank them by predicted mismatch.
+      ml-score options: --checkpoint --candidates --out
+
   ml-check --model <modelN> [ml-check options]
-      Run ml-data-gen, validate latest ml-data run, parity, and bench in sequence.
+      Run ml-data-gen, ml-train, and ml-eval in sequence.
       ml-check options:
-        --plan --mode --backend --steps --output-every --gpu-init-retries
-        --bench-repeats --bench-steps --bench-output-every
-        --skip-parity --skip-bench
+        --plan --config --mode --backend --steps --output-every --gpu-init-retries
+        --seed
 
   plot --model <modelN> [--run <run_id_or_path>] [--out <dir>] [--check-only]
       Plot a run; if --run is omitted, latest run under cases/<model>/outputs is used.
@@ -85,9 +100,11 @@ Examples:
   ./workflow gpu-check --model model1 --mode release
   ./workflow history-run --model model1 --steps 10 --mode release
   ./workflow ml-data-gen --model model1 --plan cases/model1/ml_scenarios.csv --steps 200
+  ./workflow ml-train --model model1
+  ./workflow ml-eval --model model1 --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
+  ./workflow ml-score --model model1 --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
   ./workflow ml-check --model model1
   ./workflow validate --run cases/model1/outputs/ml-data/<run_id>
-  ./workflow parity --model model1
   ./workflow bench --model model1 --repeats 3 --steps 50
   ./workflow plot --model model1
   ./workflow clean --model model1 --keep 3 --apply
@@ -245,34 +262,131 @@ case "$cmd" in
     exec "$ROOT_DIR/tools/ml_data_generate.sh" --model-dir "$model_dir" "${args[@]}"
     ;;
 
+  ml-train)
+    model=""
+    data=""
+    config=""
+    seed="42"
+    out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model) model="${2:-}"; shift 2 ;;
+        --data) data="${2:-}"; shift 2 ;;
+        --config) config="${2:-}"; shift 2 ;;
+        --seed) seed="${2:-}"; shift 2 ;;
+        --out) out="${2:-}"; shift 2 ;;
+        *) echo "Unknown argument for ml-train: $1" >&2; exit 2 ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+    if [[ -z "$data" ]]; then
+      data="$model_dir/outputs/ml-data"
+    fi
+    if [[ -z "$config" ]]; then
+      config="$model_dir/history_ml_config.yaml"
+    fi
+    if [[ -z "$out" ]]; then
+      out="$model_dir/outputs/ml-train/latest"
+    else
+      out="$(resolve_out_dir "$model_dir" "$out")"
+    fi
+    exec "$PYTHON_BIN" "$ROOT_DIR/python/ml/train_history_matcher.py" --data "$data" --config "$config" --seed "$seed" --out "$out"
+    ;;
+
+  ml-eval)
+    model=""
+    checkpoint=""
+    data=""
+    out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model) model="${2:-}"; shift 2 ;;
+        --checkpoint) checkpoint="${2:-}"; shift 2 ;;
+        --data) data="${2:-}"; shift 2 ;;
+        --out) out="${2:-}"; shift 2 ;;
+        *) echo "Unknown argument for ml-eval: $1" >&2; exit 2 ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    if [[ -z "$checkpoint" ]]; then
+      echo "Missing required argument: --checkpoint <path>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+    if [[ -z "$data" ]]; then
+      data="$model_dir/outputs/ml-data"
+    fi
+    if [[ -z "$out" ]]; then
+      out="$model_dir/outputs/ml-eval/latest"
+    else
+      out="$(resolve_out_dir "$model_dir" "$out")"
+    fi
+    exec "$PYTHON_BIN" "$ROOT_DIR/python/ml/eval_history_matcher.py" --checkpoint "$checkpoint" --data "$data" --out "$out"
+    ;;
+
+  ml-score)
+    model=""
+    checkpoint=""
+    candidates=""
+    out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model) model="${2:-}"; shift 2 ;;
+        --checkpoint) checkpoint="${2:-}"; shift 2 ;;
+        --candidates) candidates="${2:-}"; shift 2 ;;
+        --out) out="${2:-}"; shift 2 ;;
+        *) echo "Unknown argument for ml-score: $1" >&2; exit 2 ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    if [[ -z "$checkpoint" ]]; then
+      echo "Missing required argument: --checkpoint <path>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+    if [[ -z "$candidates" ]]; then
+      candidates="$model_dir/ml_scenarios.csv"
+    fi
+    if [[ -z "$out" ]]; then
+      out="$model_dir/outputs/ml-score/latest"
+    else
+      out="$(resolve_out_dir "$model_dir" "$out")"
+    fi
+    exec "$PYTHON_BIN" "$ROOT_DIR/python/ml/score_history_match.py" --checkpoint "$checkpoint" --candidates "$candidates" --out "$out"
+    ;;
+
   ml-check)
     model=""
     plan=""
+    config=""
     mode="release"
     backend="cpu"
     steps="200"
     output_every="1"
     gpu_init_retries="2"
-    bench_repeats="3"
-    bench_steps="50"
-    bench_output_every="10"
-    skip_parity=0
-    skip_bench=0
+    seed="42"
 
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --model) model="${2:-}"; shift 2 ;;
         --plan) plan="${2:-}"; shift 2 ;;
+        --config) config="${2:-}"; shift 2 ;;
         --mode) mode="${2:-}"; shift 2 ;;
         --backend) backend="${2:-}"; shift 2 ;;
         --steps) steps="${2:-}"; shift 2 ;;
         --output-every) output_every="${2:-}"; shift 2 ;;
         --gpu-init-retries) gpu_init_retries="${2:-}"; shift 2 ;;
-        --bench-repeats) bench_repeats="${2:-}"; shift 2 ;;
-        --bench-steps) bench_steps="${2:-}"; shift 2 ;;
-        --bench-output-every) bench_output_every="${2:-}"; shift 2 ;;
-        --skip-parity) skip_parity=1; shift ;;
-        --skip-bench) skip_bench=1; shift ;;
+        --seed) seed="${2:-}"; shift 2 ;;
         *)
           echo "Unknown argument for ml-check: $1" >&2
           exit 2
@@ -298,23 +412,18 @@ case "$cmd" in
     fi
     "${ml_data_cmd[@]}"
 
-    latest_ml="$(latest_run_dir_for_model "$model" "ml-data")"
-    if [[ -z "$latest_ml" ]]; then
-      echo "No ml-data runs found after ml-data-gen for model: $model" >&2
+    train_cmd=("$ROOT_DIR/workflow" "ml-train" "--model" "$model" "--seed" "$seed")
+    if [[ -n "$config" ]]; then
+      train_cmd+=("--config" "$config")
+    fi
+    "${train_cmd[@]}"
+
+    checkpoint="$ROOT_DIR/cases/$model/outputs/ml-train/latest/history_match_checkpoint.npz"
+    if [[ ! -f "$checkpoint" ]]; then
+      echo "ML checkpoint not found after training: $checkpoint" >&2
       exit 2
     fi
-    "$ROOT_DIR/tools/validate_run.py" --run "$latest_ml"
-    if [[ "$skip_parity" -eq 0 ]]; then
-      "$ROOT_DIR/tools/parity_report.py" --model "$model"
-    fi
-    if [[ "$skip_bench" -eq 0 ]]; then
-      "$ROOT_DIR/tools/benchmark_matrix.py" \
-        --model "$model" \
-        --repeats "$bench_repeats" \
-        --steps "$bench_steps" \
-        --output-every "$bench_output_every" \
-        --gpu-init-retries "$gpu_init_retries"
-    fi
+    exec "$ROOT_DIR/workflow" ml-eval --model "$model" --checkpoint "$checkpoint"
     ;;
 
   validate)

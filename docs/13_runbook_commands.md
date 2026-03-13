@@ -8,7 +8,7 @@ This document defines command contracts. It does not imply implementation alread
 - Auto-managed outputs must be saved under `outputs/<purpose>/<run_id>/`.
 - Purpose buckets are:
   - `benchmark` for performance/parity matrices,
-  - `ml-data` for runs intended to feed surrogate dataset generation,
+  - `ml-data` for runs intended to feed history-match ML dataset generation,
   - `history` for history-run replay and mismatch artifacts.
 
 ## Command Contracts
@@ -73,25 +73,35 @@ Expected behavior:
 - Execute matrix across scenarios/backends.
 - Aggregate into benchmark summary CSV.
 
-### Surrogate Training
+### History-Match ML Training
 
 ```bash
-python python/ml/train_surrogate.py --data <outputs_dir> --config <yaml> --seed <int> --out <dir>
+python python/ml/train_history_matcher.py --data <outputs_dir> --config <yaml> --seed <int> --out <dir>
 ```
 
 Expected behavior:
-- Build datasets per split policy.
-- Train and save checkpoint(s) + train log.
+- Build tabular candidate datasets per split policy.
+- Train and save checkpoint(s), split metrics, and prediction logs.
 
-### Surrogate Evaluation
+### History-Match ML Evaluation
 
 ```bash
-python python/ml/eval_surrogate.py --checkpoint <ckpt> --case <path> --horizons 20,50,100 --out <dir>
+python python/ml/eval_history_matcher.py --checkpoint <ckpt> --data <outputs_dir> --out <dir>
 ```
 
 Expected behavior:
-- Run one-step and rollout metrics.
-- Save metrics CSV and comparison plots.
+- Compute held-out regression and ranking metrics.
+- Save metrics CSV and ranked candidate comparisons.
+
+### History-Match Candidate Scoring
+
+```bash
+python python/ml/score_history_match.py --checkpoint <ckpt> --candidates <csv> --out <dir>
+```
+
+Expected behavior:
+- Read candidate rows matching the trained feature contract.
+- Predict mismatch objective and write ranked candidate scores.
 
 ### Visualization Build
 

@@ -65,18 +65,16 @@ MODE_SPECS = {
         {"key": "out", "label": "Out Dir (optional)", "kind": "text"},
     ],
     "ml-eval": [
+        {"key": "model", "label": "Model", "kind": "enum", "required": True},
         {"key": "checkpoint", "label": "Checkpoint (.npz)", "kind": "text", "required": True},
-        {"key": "case", "label": "Run Dir or Case YAML", "kind": "text", "required": True},
-        {"key": "horizons", "label": "Horizons", "kind": "text", "default": "20,50,100"},
-        {"key": "out", "label": "Out Dir", "kind": "text", "default": "surrogate_eval"},
+        {"key": "data", "label": "Data Dir (optional)", "kind": "text"},
+        {"key": "out", "label": "Out Dir", "kind": "text"},
     ],
-    "ml-predict": [
+    "ml-score": [
+        {"key": "model", "label": "Model", "kind": "enum", "required": True},
         {"key": "checkpoint", "label": "Checkpoint (.npz)", "kind": "text", "required": True},
-        {"key": "run", "label": "Run Dir/ID (optional)", "kind": "text"},
-        {"key": "step", "label": "Step", "kind": "text", "default": "0"},
-        {"key": "pressure", "label": "Pressure NPY (optional)", "kind": "text"},
-        {"key": "sw", "label": "Sw NPY (optional)", "kind": "text"},
-        {"key": "out", "label": "Out Dir", "kind": "text", "default": "surrogate_predict"},
+        {"key": "candidates", "label": "Candidate CSV (optional)", "kind": "text"},
+        {"key": "out", "label": "Out Dir", "kind": "text"},
     ],
     "ml-check": [
         {"key": "model", "label": "Model", "kind": "enum", "required": True},
@@ -85,11 +83,8 @@ MODE_SPECS = {
         {"key": "backend", "label": "Backend", "kind": "enum", "default": "cpu", "choices": ["cpu", "gpu"]},
         {"key": "steps", "label": "Steps", "kind": "text", "default": "200"},
         {"key": "output_every", "label": "Output Every", "kind": "text", "default": "1"},
-        {"key": "bench_repeats", "label": "Bench Repeats", "kind": "text", "default": "3"},
-        {"key": "bench_steps", "label": "Bench Steps", "kind": "text", "default": "50"},
-        {"key": "bench_output_every", "label": "Bench Output Every", "kind": "text", "default": "10"},
-        {"key": "skip_parity", "label": "Skip Parity", "kind": "bool"},
-        {"key": "skip_bench", "label": "Skip Bench", "kind": "bool"},
+        {"key": "config", "label": "Config YAML (optional)", "kind": "text"},
+        {"key": "seed", "label": "Seed", "kind": "text", "default": "42"},
     ],
     "validate": [
         {"key": "run", "label": "Run Path/ID", "kind": "text", "required": True},
@@ -137,17 +132,8 @@ ARG_FLAG = {
     "config": "--config",
     "seed": "--seed",
     "checkpoint": "--checkpoint",
-    "case": "--case",
-    "horizons": "--horizons",
-    "pressure": "--pressure",
-    "sw": "--sw",
-    "step": "--step",
+    "candidates": "--candidates",
     "keep_temp": "--keep-temp",
-    "bench_repeats": "--bench-repeats",
-    "bench_steps": "--bench-steps",
-    "bench_output_every": "--bench-output-every",
-    "skip_parity": "--skip-parity",
-    "skip_bench": "--skip-bench",
     "run": "--run",
     "cpu_run": "--cpu-run",
     "gpu_run": "--gpu-run",
@@ -478,7 +464,7 @@ HTML = """<!doctype html>
       "data-generation": "ml-data-gen",
       "training": "ml-train",
       "evaluate": "ml-eval",
-      "predict": "ml-predict",
+      "score": "ml-score",
       "full-check": "ml-check",
     };
     const ML_KIND_CHOICES = Object.keys(ML_KIND_TO_MODE);
@@ -490,10 +476,10 @@ HTML = """<!doctype html>
       "parity": "CPU-GPU values check",
     };
     const ML_KIND_LABELS = {
-      "data-generation": "Data Generation",
-      "training": "Training",
-      "evaluate": "Evaluate",
-      "predict": "Predict",
+      "data-generation": "Candidate Data",
+      "training": "Train Ranker",
+      "evaluate": "Evaluate Ranker",
+      "score": "Score Candidates",
       "full-check": "Full ML Check",
     };
 
@@ -731,7 +717,7 @@ HTML = """<!doctype html>
           inp.type = "text";
           inp.value = state[spec.key] || "";
           inp.oninput = () => { state[spec.key] = inp.value; updatePreview(); };
-          const PICKER_KEYS = new Set(["out", "run", "case", "case_file", "data", "plan", "cpu_run", "gpu_run"]);
+          const PICKER_KEYS = new Set(["out", "run", "case_file", "data", "plan", "config", "checkpoint", "candidates", "cpu_run", "gpu_run"]);
           const needsFolderPicker = PICKER_KEYS.has(spec.key);
           if (needsFolderPicker) {
             const row = document.createElement("div");
@@ -827,39 +813,6 @@ HTML = """<!doctype html>
     }
 
     function cmdText(payload) {
-      if (payload.mode === "ml-train") {
-        const model = String(payload.args.model || "").trim();
-        const data = String(payload.args.data || `cases/${model}/outputs/ml-data`).trim();
-        const config = String(payload.args.config || `cases/${model}/surrogate_config.yaml`).trim();
-        const out = String(payload.args.out || `cases/${model}/outputs/surrogate-train`).trim();
-        const seed = String(payload.args.seed || "42").trim();
-        return [
-          "python3",
-          "python/ml/train_surrogate.py",
-          "--data", data,
-          "--config", config,
-          "--seed", seed,
-          "--out", out,
-        ].map(shquote).join(" ");
-      }
-      if (payload.mode === "ml-eval") {
-        const parts = ["python3", "python/ml/eval_surrogate.py"];
-        for (const [k, v] of Object.entries(payload.args)) {
-          const f = ARG_FLAG[k];
-          if (!f) continue;
-          parts.push(f, String(v));
-        }
-        return parts.map(shquote).join(" ");
-      }
-      if (payload.mode === "ml-predict") {
-        const parts = ["python3", "python/ml/predict_surrogate.py"];
-        for (const [k, v] of Object.entries(payload.args)) {
-          const f = ARG_FLAG[k];
-          if (!f) continue;
-          parts.push(f, String(v));
-        }
-        return parts.map(shquote).join(" ");
-      }
       const parts = ["./workflow", payload.mode];
       for (const [k, v] of Object.entries(payload.args)) {
         const f = ARG_FLAG[k];
@@ -944,7 +897,8 @@ HTML = """<!doctype html>
       const cards = [
         ["Run ID", simplifyRunId(summary.run_id || "")],
         ["Backend", summary.backend || ""],
-        ["Steps", `${summary.steps_completed || 0} / ${summary.steps_requested || 0}`],
+        ["Steps", `${summary.steps_completed || 0}`],
+        ["Requested Steps", `${summary.steps_requested || 0}`],
         ["Checkpoints", summary.checkpoints_written || 0],
         ["Total Time (s)", fmtNum(timing.total_time_s, 6)],
         ["Avg Step Time (s)", fmtNum(timing.avg_step_time_s, 6)],
@@ -1207,10 +1161,10 @@ def repo_rel(path_obj: Path) -> str:
 
 def default_ml_plan_content() -> str:
     return (
-        "tag,injector_rate_stb_day,producer_bhp_psi,rock.permeability_md\n"
-        "train-a,80.0,2800.0,100.0\n"
-        "train-b,120.0,2600.0,150.0\n"
-        "eval-a,100.0,2700.0,120.0\n"
+        "tag,rock.permeability_md,rock.porosity,fluid.nw,fluid.no,producer_pi\n"
+        "candidate-a,120.0,0.18,1.8,2.1,1.05\n"
+        "candidate-b,140.0,0.19,2.0,2.0,1.20\n"
+        "candidate-c,165.0,0.17,2.3,1.9,1.35\n"
     )
 
 
@@ -1242,71 +1196,6 @@ def python_exec() -> str:
 def build_cli(mode: str, args: dict[str, object]) -> list[str]:
     if mode not in MODE_SPECS:
         raise ValueError(f"Unsupported mode: {mode}")
-    if mode == "ml-train":
-        model = str(args.get("model", "")).strip()
-        if not model:
-            raise ValueError("Missing required field: Model")
-        data = str(args.get("data", "")).strip() or str(ROOT / "cases" / model / "outputs" / "ml-data")
-        config = str(args.get("config", "")).strip() or str(ROOT / "cases" / model / "surrogate_config.yaml")
-        seed = str(args.get("seed", "")).strip() or "42"
-        out = str(args.get("out", "")).strip() or str(ROOT / "cases" / model / "outputs" / "surrogate-train")
-        return [
-            python_exec(),
-            str(ROOT / "python" / "ml" / "train_surrogate.py"),
-            "--data",
-            data,
-            "--config",
-            config,
-            "--seed",
-            seed,
-            "--out",
-            out,
-        ]
-    if mode == "ml-eval":
-        checkpoint = str(args.get("checkpoint", "")).strip()
-        case = str(args.get("case", "")).strip()
-        horizons = str(args.get("horizons", "")).strip() or "20,50,100"
-        out = str(args.get("out", "")).strip() or "surrogate_eval"
-        if not checkpoint:
-            raise ValueError("Missing required field: Checkpoint (.npz)")
-        if not case:
-            raise ValueError("Missing required field: Run Dir or Case YAML")
-        return [
-            python_exec(),
-            str(ROOT / "python" / "ml" / "eval_surrogate.py"),
-            "--checkpoint",
-            checkpoint,
-            "--case",
-            case,
-            "--horizons",
-            horizons,
-            "--out",
-            out,
-        ]
-    if mode == "ml-predict":
-        checkpoint = str(args.get("checkpoint", "")).strip()
-        out = str(args.get("out", "")).strip() or "surrogate_predict"
-        run_arg = str(args.get("run", "")).strip()
-        pressure = str(args.get("pressure", "")).strip()
-        sw = str(args.get("sw", "")).strip()
-        step = str(args.get("step", "")).strip() or "0"
-        if not checkpoint:
-            raise ValueError("Missing required field: Checkpoint (.npz)")
-        if not run_arg and not (pressure and sw):
-            raise ValueError("Provide either Run Dir/ID, or both Pressure NPY and Sw NPY.")
-        cmd = [
-            python_exec(),
-            str(ROOT / "python" / "ml" / "predict_surrogate.py"),
-            "--checkpoint",
-            checkpoint,
-            "--out",
-            out,
-        ]
-        if run_arg:
-            cmd.extend(["--run", run_arg, "--step", step])
-        else:
-            cmd.extend(["--pressure", pressure, "--sw", sw])
-        return cmd
     cmd = [str(WORKFLOW), mode]
     for spec in MODE_SPECS[mode]:
         key = spec["key"]

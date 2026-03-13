@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PYTHON_BIN="python3"
+if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+fi
 
 MODEL_DIR=""
 PLAN_FILE=""
@@ -19,7 +23,7 @@ Usage:
   tools/ml_data_generate.sh --model-dir <path> [options]
 
 Options:
-  --plan <csv>               Scenario CSV file (default: <model-dir>/ml_scenarios.csv)
+  --plan <csv>               Candidate CSV file (default: <model-dir>/ml_scenarios.csv)
   --mode <debug|release>     Simulator mode for generated runs (default: release)
   --backend <cpu|gpu>        Backend for generated runs (default: cpu)
   --steps <N>                Steps per run (default: 200)
@@ -36,8 +40,8 @@ Scenario CSV contract:
 
 Example:
   tag,injector_rate_stb_day,producer_bhp_psi,rock.permeability_md
-  train-a,80.0,2800.0,100.0
-  train-b,120.0,2600.0,150.0
+  candidate-a,80.0,2800.0,100.0
+  candidate-b,120.0,2600.0,150.0
 USAGE
 }
 
@@ -161,8 +165,14 @@ if [[ ! -d "$MODEL_DIR" ]]; then
 fi
 
 BASE_YAML="$MODEL_DIR/model.yaml"
+HISTORY_CONTROLS="$MODEL_DIR/history_controls.csv"
+HISTORY_OBSERVATIONS="$MODEL_DIR/history_observations.csv"
 if [[ ! -f "$BASE_YAML" ]]; then
   echo "Base model file not found: $BASE_YAML" >&2
+  exit 2
+fi
+if [[ ! -f "$HISTORY_CONTROLS" || ! -f "$HISTORY_OBSERVATIONS" ]]; then
+  echo "History CSV files not found in model directory: $MODEL_DIR" >&2
   exit 2
 fi
 
@@ -259,6 +269,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   tmp_yaml="$tmp_root/model_${tag}.yaml"
   cp "$BASE_YAML" "$tmp_yaml"
+  replace_yaml_key "$tmp_yaml" "history.controls_csv" "\"$HISTORY_CONTROLS\""
+  replace_yaml_key "$tmp_yaml" "history.observations_csv" "\"$HISTORY_OBSERVATIONS\""
 
   if [[ "$case_name_idx" -lt 0 ]]; then
     replace_yaml_key "$tmp_yaml" "case_name" "\"${base_case_name}__${tag}\""
@@ -279,7 +291,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   echo "[run] model=$model_name tag=$tag case=$tmp_yaml"
   set +e
-  run_output="$(RESERV_OUTPUT_BUCKET="ml-data" "$ROOT_DIR/tools/model_run.sh" \
+  run_output="$(RESERV_OUTPUT_BUCKET="ml-data" "$ROOT_DIR/tools/history_run.sh" \
     --model-dir "$MODEL_DIR" \
     --mode "$MODE" \
     --backend "$BACKEND" \
@@ -305,7 +317,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   ran_count=$((ran_count + 1))
 done < "$PLAN_FILE"
 
-echo "[done] generated_ml_runs=$ran_count plan=$PLAN_FILE"
+"$PYTHON_BIN" "$ROOT_DIR/python/ml/build_history_match_dataset.py" \
+  --runs-root "$MODEL_DIR/outputs/ml-data" \
+  --plan "$PLAN_FILE" \
+  --out "$MODEL_DIR/outputs/ml-data/history_ml_dataset.csv"
+
+echo "[done] generated_ml_runs=$ran_count plan=$PLAN_FILE dataset=$MODEL_DIR/outputs/ml-data/history_ml_dataset.csv"
 if [[ "$KEEP_TEMP" -eq 1 ]]; then
   echo "[keep-temp] $tmp_root"
 fi

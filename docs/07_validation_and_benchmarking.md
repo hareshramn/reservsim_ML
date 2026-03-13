@@ -11,7 +11,7 @@
 ## Validation Execution Order
 
 1. Lock CPU numerical correctness and artifact schema.
-2. Validate surrogate training/evaluation outputs against the CPU baseline.
+2. Validate history-match ML training/evaluation outputs against the CPU baseline.
 3. Run CPU/GPU parity checks once the baseline dataset and outputs are stable.
 4. Treat GPU speedup benchmarking as the final optimization-stage validation pass.
 
@@ -54,7 +54,7 @@ Publish:
 - variance across repeated runs.
 
 Execution note:
-- Performance speedup evidence is collected after correctness, surrogate, and parity evidence are stable enough to avoid chasing profiling noise from moving baselines.
+- Performance speedup evidence is collected after correctness, history-match ML, and parity evidence are stable enough to avoid chasing profiling noise from moving baselines.
 
 ## Surrogate Validation
 

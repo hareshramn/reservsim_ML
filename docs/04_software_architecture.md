@@ -3,7 +3,7 @@
 ## Module Boundaries
 
 - `core-cpp/`: C++17 + CUDA simulation engine.
-- `python/`: surrogate training, evaluation, visualization, report helpers.
+- `python/`: history-match ML training, evaluation, candidate scoring, visualization, report helpers.
 - `cases/`: YAML case configurations.
 - `outputs/`: generated run artifacts, organized by purpose bucket (`benchmark`, `ml-data`, `history`) when auto-managed by workflow tooling.
 - `docs/`: specs and governance.
@@ -13,9 +13,9 @@
 1. Case YAML -> simulator config object.
 2. Optional history control/observation tables -> replay schedule + comparison targets.
 3. Simulator run -> checkpoint tensors + metrics under `outputs/<purpose>/<run_id>/`.
-4. `outputs/ml-data/<run_id>/` checkpoints -> ML dataset.
-5. Trained model -> evaluation.
-6. Evaluation outputs -> benchmark tables and visuals.
+4. `outputs/ml-data/<run_id>/` history-run artifacts -> tabular ML dataset.
+5. Trained ML ranker -> evaluation and candidate scoring.
+6. Evaluation outputs -> ranking tables and visuals.
 
 ## Locked CLI Contracts
 
@@ -53,16 +53,22 @@ Error output contract:
   - `symbol` (stable string token),
   - `message` (human-readable explanation).
 
-### Training
+### History-Match ML Training
 
 ```bash
-python python/ml/train_surrogate.py --data <dir> --config <yaml>
+python python/ml/train_history_matcher.py --data <dir> --config <yaml> --seed <int> --out <dir>
 ```
 
-### Evaluation
+### History-Match ML Evaluation
 
 ```bash
-python python/ml/eval_surrogate.py --checkpoint <ckpt> --case <path> --out <dir>
+python python/ml/eval_history_matcher.py --checkpoint <ckpt> --data <dir> --out <dir>
+```
+
+### Candidate Scoring
+
+```bash
+python python/ml/score_history_match.py --checkpoint <ckpt> --candidates <csv> --out <dir>
 ```
 
 ## Case Schema Contract (3D Grid v1)
@@ -246,7 +252,7 @@ This section is planning-only and becomes executable after the pre-implementatio
 - Main simulator entrypoint remains `sim_run` with currently locked flags.
 - History-mode replay is the primary end-user workflow for model execution.
 - State arrays remain dense 2D fields indexed as `[nx, ny]` in docs-facing contracts.
-- First implementation target is correctness and reproducibility on CPU, then surrogate data/training flow, then CPU/GPU parity, with GPU optimization deferred to the final performance pass.
+- First implementation target is correctness and reproducibility on CPU, then history-match ML dataset/training flow, then CPU/GPU parity, with GPU optimization deferred to the final performance pass.
 
 ## Resolved v1 Decisions
 

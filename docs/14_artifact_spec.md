@@ -5,7 +5,7 @@
 1. Benchmark summary CSV.
 2. Numerical validation CSV.
 3. History-match / mismatch CSV and JSON artifacts.
-4. Surrogate evaluation CSV.
+4. History-match ML evaluation CSV.
 5. Required PNG figures.
 6. MP4 animations.
 7. Technical report (`report.pdf`).
@@ -56,19 +56,24 @@ Columns:
 - `io_time_s`
 - `total_time_s`
 
-### `surrogate_eval.csv`
+### `history_ml_eval.csv`
 
 Columns:
-- `run_id`
+- `split`
 - `model_name`
-- `scenario`
-- `horizon`
-- `rmse_sw`
-- `rmse_p`
-- `mae_sw`
-- `mae_p`
-- `mass_penalty`
-- `infer_steps_per_s`
+- `samples`
+- `mae_objective`
+- `rmse_objective`
+- `spearman_rank`
+- `top3_overlap`
+
+### `candidate_scores.csv`
+
+Columns:
+- `predicted_rank`
+- `tag`
+- `predicted_objective`
+- feature columns used by the checkpoint
 
 ### `history_match.csv`
 
@@ -119,7 +124,7 @@ Required top-level fields:
 - Format:
   - `anim_<scenario>_<backend>_pressure.mp4`
   - `anim_<scenario>_<backend>_sw.mp4`
-  - `anim_<scenario>_sim_vs_surrogate.mp4`
+  - `anim_<scenario>_history_run.mp4`
 
 ## Report Structure
 
@@ -127,7 +132,7 @@ Required top-level fields:
 2. Problem and assumptions.
 3. Physics and numerics.
 4. Software and CPU baseline implementation.
-5. Surrogate method and evaluation.
+5. History-match ML method and evaluation.
 6. CPU/GPU parity and GPU optimization.
 7. Validation and benchmark results.
 8. Limits and future work.
@@ -139,7 +144,7 @@ Required top-level fields:
 - `docs/` complete
 - `benchmarks/benchmark_summary.csv`
 - `history_match.csv` or equivalent exported mismatch artifact for the main history run
-- `surrogate_eval.csv`
+- `history_ml_eval.csv`
 - required PNG figures
 - at least two MP4 files
 - final `report.pdf`

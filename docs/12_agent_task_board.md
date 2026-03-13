@@ -5,7 +5,7 @@
 - Agent A: physics + numerics docs.
 - Agent B: software architecture + interfaces.
 - Agent C: GPU optimization specification.
-- Agent D: ML surrogate specification.
+- Agent D: history-match ML specification.
 - Agent E: validation, visualization, artifact and runbook packaging.
 
 ## Task Cards
@@ -43,10 +43,10 @@
 - Inputs: `03_numerical_methods.md`, `04_software_architecture.md`.
 - Outputs: `05_gpu_optimization_plan.md`.
 - Dependencies: DOC-04.
-- Done criteria: kernel order + metrics + benchmark matrix fixed, with optimization deferred until after CPU and surrogate baselines are stable.
+- Done criteria: kernel order + metrics + benchmark matrix fixed, with optimization deferred until after CPU and history-match ML baselines are stable.
 
 ### DOC-06 (Agent D)
-- Objective: define surrogate model and training protocol.
+- Objective: define history-match ML model and training protocol.
 - Inputs: `02_physics_math.md`, `04_software_architecture.md`.
 - Outputs: `06_surrogate_ml_plan.md`.
 - Dependencies: DOC-04.

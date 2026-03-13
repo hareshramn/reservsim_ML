@@ -1,6 +1,7 @@
 # Scenario matrix for ML-data generation.
 # Header keys map to model.yaml fields; nested keys use dot notation.
-tag,injector_rate_stb_day,producer_bhp_psi,rock.permeability_md,rock.porosity
-history-a,90.0,2800.0,120.0,0.18
-history-b,100.0,2750.0,140.0,0.19
-history-c,110.0,2700.0,160.0,0.17
+# In history mode, vary uncertain reservoir/model parameters rather than historical controls.
+tag,rock.permeability_md,rock.porosity,fluid.nw,fluid.no,producer_pi
+history-a,120.0,0.18,1.8,2.1,1.05
+history-b,140.0,0.19,2.0,2.0,1.20
+history-c,165.0,0.17,2.3,1.9,1.35

@@ -9,7 +9,7 @@
    - average reservoir pressure.
 4. Comparison panels:
    - CPU vs GPU fields,
-   - simulator vs surrogate fields.
+   - history-run fields and history-match ML ranking summaries.
 5. Performance visuals:
    - runtime bars,
    - speedup bars,
@@ -22,7 +22,7 @@
 - Naming convention:
   - `anim_<scenario>_<backend>_pressure.mp4`
   - `anim_<scenario>_<backend>_sw.mp4`
-  - `anim_<scenario>_sim_vs_surrogate.mp4`
+  - `anim_<scenario>_history_run.mp4`
 
 ## Plot Naming Convention
 
@@ -40,11 +40,11 @@
 ## Reporting Sequence
 
 - Interim reviews may omit final GPU speedup visuals if optimization is still deferred.
-- Before final submission, add the GPU optimization section after numerical and surrogate results so performance claims are presented against a stable baseline.
+- Before final submission, add the GPU optimization section after numerical and history-match ML results so performance claims are presented against a stable baseline.
 
 ## Acceptance Criteria
 
 1. All required figures generated for default case.
-2. At least one animation for solver and one for surrogate comparison.
+2. At least one animation for solver output and one ML ranking/result figure.
 3. Figure naming is consistent with artifact specification.
 4. If GPU optimization is still in progress, interim reports must label CPU/GPU speedup visuals as pending rather than implying final performance closure.

@@ -22,7 +22,7 @@
 - Early warning:
   - transfer overhead dominates timeline.
 - Mitigation:
-  - defer deep profiling until CPU outputs and surrogate data contracts are frozen,
+  - defer deep profiling until CPU outputs and history-match ML data contracts are frozen,
   - keep state on device,
   - kernel fusion where valid,
   - launch parameter tuning by occupancy data.
@@ -40,7 +40,7 @@
   - scheduled sampling style training,
   - scenario-balanced data generation.
 - Scope fallback:
-  - position surrogate as short-horizon accelerator.
+  - position ML as a candidate-screening accelerator for history matching.
 
 ## Risk 4: Schedule Compression
 
@@ -51,4 +51,4 @@
   - use predefined acceptance thresholds,
   - narrow to default scenario first.
 - Scope fallback:
-  - preserve CPU correctness, surrogate evidence, and reproducible artifacts first; move GPU optimization to the end of the schedule.
+  - preserve CPU correctness, history-match ML evidence, and reproducible artifacts first; move GPU optimization to the end of the schedule.

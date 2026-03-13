@@ -15,7 +15,7 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - Models how water and oil move in a synthetic reservoir.
 - Focuses first on history-mode style replay and validation.
 - Keeps GPU optimization as a later-stage performance pass.
-- Uses an AI surrogate plan aimed at accelerating history matching rather than forecast-first rollout.
+- Uses an ML ranker plan aimed at accelerating history matching by screening candidate parameter sets.
 - Produces reproducible artifacts for transparent validation.
 
 ## Why It Matters
@@ -36,7 +36,7 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - Finite Volume / TPFA
 - Physics-Informed ML
 - History Matching
-- Surrogate Modeling
+- ML Candidate Ranking
 - Scientific Computing
 - Performance Optimization
 - Profiling (Nsight)
@@ -83,7 +83,7 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 4. [Numerical Methods](docs/03_numerical_methods.md)
 5. [Software Architecture](docs/04_software_architecture.md)
 6. [GPU Optimization Plan](docs/05_gpu_optimization_plan.md)
-7. [Surrogate ML Plan](docs/06_surrogate_ml_plan.md)
+7. [History-Match ML Plan](docs/06_surrogate_ml_plan.md)
 8. [Validation and Benchmarking](docs/07_validation_and_benchmarking.md)
 9. [Visualization and Reporting](docs/08_visualization_and_reporting.md)
 10. [2-Week Timeline](docs/09_execution_timeline_2weeks.md)
@@ -121,12 +121,17 @@ The browser UI is the default product surface. Use the CLI for manual history-ru
 Current implementation note:
 - `history-run` is the active model-execution path in the current codebase.
 - Full iterative `history-match` optimization is not implemented yet.
+- ML now focuses on candidate screening for history matching, not field-to-field transition surrogates.
 
 Manual path (advanced examples from repo root):
 
 ```bash
 ./workflow compile --mode debug --cuda off
 ./workflow history-run --model model1 --steps 10 --mode release
+./workflow ml-data-gen --model model1 --steps 200
+./workflow ml-train --model model1
+./workflow ml-eval --model model1 --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
+./workflow ml-score --model model1 --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
 ./workflow plot --model model1
 ./workflow clean --model model1 --keep 3 --apply
 ./workflow all --model model1 --steps 10

@@ -1,0 +1,8 @@
+# History-match ML config (simple YAML subset).
+model_name: "history_match_ridge_demo"
+feature_keys: ["rock.permeability_md", "rock.porosity", "fluid.nw", "fluid.no", "producer_pi"]
+target_transform: "log10"
+target_epsilon: 1.0
+split_train: 0.7
+split_val: 0.15
+ridge_lambda: 0.000001

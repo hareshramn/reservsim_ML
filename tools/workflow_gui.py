@@ -36,7 +36,7 @@ def list_models() -> list[str]:
 
 MODE_SPECS: dict[str, list[FieldSpec]] = {
     "doctor": [],
-    "run": [
+    "history-run": [
         FieldSpec("model", "Model", "enum", required=True),
         FieldSpec("mode", "Mode", "enum", default="release", choices=("debug", "release")),
         FieldSpec("backend", "Backend", "enum", default="cpu", choices=("cpu", "gpu")),
@@ -54,18 +54,34 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
         FieldSpec("output_every", "Output Every", "text", default="1"),
         FieldSpec("keep_temp", "Keep Temp", "bool"),
     ],
+    "ml-train": [
+        FieldSpec("model", "Model", "enum", required=True),
+        FieldSpec("data", "Data Dir", "text"),
+        FieldSpec("config", "Config YAML", "text"),
+        FieldSpec("seed", "Seed", "text", default="42"),
+        FieldSpec("out", "Out Dir", "text"),
+    ],
+    "ml-eval": [
+        FieldSpec("model", "Model", "enum", required=True),
+        FieldSpec("checkpoint", "Checkpoint", "text", required=True),
+        FieldSpec("data", "Data Dir", "text"),
+        FieldSpec("out", "Out Dir", "text"),
+    ],
+    "ml-score": [
+        FieldSpec("model", "Model", "enum", required=True),
+        FieldSpec("checkpoint", "Checkpoint", "text", required=True),
+        FieldSpec("candidates", "Candidate CSV", "text"),
+        FieldSpec("out", "Out Dir", "text"),
+    ],
     "ml-check": [
         FieldSpec("model", "Model", "enum", required=True),
         FieldSpec("plan", "Plan CSV", "text"),
+        FieldSpec("config", "Config YAML", "text"),
         FieldSpec("mode", "Mode", "enum", default="release", choices=("debug", "release")),
         FieldSpec("backend", "Backend", "enum", default="cpu", choices=("cpu", "gpu")),
         FieldSpec("steps", "Steps", "text", default="200"),
         FieldSpec("output_every", "Output Every", "text", default="1"),
-        FieldSpec("bench_repeats", "Bench Repeats", "text", default="3"),
-        FieldSpec("bench_steps", "Bench Steps", "text", default="50"),
-        FieldSpec("bench_output_every", "Bench Output Every", "text", default="10"),
-        FieldSpec("skip_parity", "Skip Parity", "bool"),
-        FieldSpec("skip_bench", "Skip Bench", "bool"),
+        FieldSpec("seed", "Seed", "text", default="42"),
     ],
     "validate": [
         FieldSpec("run", "Run Path/ID", "text", required=True),
@@ -108,12 +124,12 @@ ARG_FLAG = {
     "tag": "--tag",
     "out": "--out",
     "plan": "--plan",
+    "data": "--data",
+    "config": "--config",
+    "seed": "--seed",
+    "checkpoint": "--checkpoint",
+    "candidates": "--candidates",
     "keep_temp": "--keep-temp",
-    "bench_repeats": "--bench-repeats",
-    "bench_steps": "--bench-steps",
-    "bench_output_every": "--bench-output-every",
-    "skip_parity": "--skip-parity",
-    "skip_bench": "--skip-bench",
     "run": "--run",
     "cpu_run": "--cpu-run",
     "gpu_run": "--gpu-run",
@@ -143,7 +159,7 @@ class WorkflowGui:
         header.pack(fill="x")
 
         ttk.Label(header, text="Mode").pack(side="left")
-        self.mode_var = StringVar(value="run")
+        self.mode_var = StringVar(value="history-run")
         modes = sorted(MODE_SPECS.keys())
         self.mode_combo = ttk.Combobox(header, textvariable=self.mode_var, values=modes, state="readonly", width=24)
         self.mode_combo.pack(side="left", padx=(8, 16))
