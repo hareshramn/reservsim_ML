@@ -91,7 +91,7 @@ MODE_SPECS: dict[str, list[FieldSpec]] = {
     ],
     "clean": [
         FieldSpec("model", "Model", "enum", required=True),
-        FieldSpec("bucket", "Type of run", "enum", default="all", choices=("all", "adhoc", "benchmark", "ml-data", "legacy")),
+        FieldSpec("bucket", "Type of run", "enum", default="all", choices=("all", "history", "benchmark", "ml-data", "legacy")),
         FieldSpec("keep", "Keep Newest N", "text", default="5"),
         FieldSpec("apply", "Apply", "bool"),
     ],

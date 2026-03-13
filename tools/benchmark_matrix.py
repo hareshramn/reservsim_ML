@@ -68,7 +68,7 @@ def run_case(root: Path, model: str, backend: str, repeat_idx: int, steps: int, 
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout)
         sys.stderr.write(proc.stderr)
-        raise RuntimeError(f"workflow run failed for backend={backend} repeat={repeat_idx}")
+        raise RuntimeError(f"benchmark model execution failed for backend={backend} repeat={repeat_idx}")
     return parse_output_dir(proc.stdout)
 
 

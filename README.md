@@ -116,17 +116,17 @@ Advanced and manual workflows:
 ./workflow --help
 ```
 
-The browser UI is the default product surface. Use the CLI for manual runs, debugging, contract checks, and advanced argument control.
+The browser UI is the default product surface. Use the CLI for manual history-run execution, debugging, contract checks, and advanced argument control.
 
 Current implementation note:
-- The repository already supports forward simulation, validation, and ML utilities.
-- Full history-run and history-match features are the active direction and are not fully implemented yet.
+- `history-run` is the active model-execution path in the current codebase.
+- Full iterative `history-match` optimization is not implemented yet.
 
 Manual path (advanced examples from repo root):
 
 ```bash
 ./workflow compile --mode debug --cuda off
-./workflow run --model model1 --steps 10 --mode release
+./workflow history-run --model model1 --steps 10 --mode release
 ./workflow plot --model model1
 ./workflow clean --model model1 --keep 3 --apply
 ./workflow all --model model1 --steps 10
@@ -136,7 +136,7 @@ Model convention:
 - each model lives in its own folder,
 - required file name: `model.yaml`,
 - defaults live in `run.env`,
-- run with local `./run`,
+- execute from repo root with `./workflow history-run --model <model>`,
 - outputs are written to `<model_dir>/outputs/<purpose>/<run_id>/`.
 
 Examples:
@@ -170,7 +170,7 @@ tools/plot_run.sh --run cases/model1/outputs/<run_id> --check-only
 
 ## MCP Server (LLM Tooling)
 
-This repo now includes a real MCP server that exposes compile/run/plot/clean tools:
+This repo now includes a real MCP server that exposes compile/history-run/plot/clean tools:
 
 ```bash
 .venv/bin/pip install mcp
@@ -185,4 +185,4 @@ Exposed MCP tools:
 - `all_in_one`
 
 Example MCP-style intent:
-- "Compile and run model1 for 10 steps, then plot" -> call `all_in_one(model=\"model1\", steps=10)`
+- "Compile and history-run model1 for 10 steps, then plot" -> call `all_in_one(model=\"model1\", steps=10)`

@@ -11,7 +11,7 @@ Usage:
 Primary user path:
   ./webui
 
-CLI is intended for advanced/manual runs, automation, and debugging.
+CLI is intended for advanced/manual history-run workflows, automation, and debugging.
 
 Commands:
   compile|build [compile options]
@@ -28,11 +28,6 @@ Commands:
 
   gpu-check --model <modelN> [gpu-check options]
       Probe CUDA readiness with a tiny GPU run.
-
-  run --model <modelN> [run options]
-      Run one model from repo root.
-      Advanced/manual CLI path; most users should use ./webui.
-      Run options: --mode --backend --steps --output-every --out --gpu-init-retries --tag --case-file
 
   history-run --model <modelN> [history-run options]
       Replay one model in history mode and generate mismatch artifacts.
@@ -66,7 +61,7 @@ Commands:
       Clean output directories.
 
   all --model <modelN> [options]
-      Compile, run, then plot in one command.
+      Compile, history-run, then plot in one command.
       Options:
         --mode <debug|release>        (default: release)
         --backend <cpu|gpu>           (default: cpu)
@@ -88,7 +83,6 @@ Examples:
   ./workflow ui
   ./workflow web-ui
   ./workflow gpu-check --model model1 --mode release
-  ./workflow run --model model1 --steps 10 --mode release
   ./workflow history-run --model model1 --steps 10 --mode release
   ./workflow ml-data-gen --model model1 --plan cases/model1/ml_scenarios.csv --steps 200
   ./workflow ml-check --model model1
@@ -200,33 +194,6 @@ case "$cmd" in
     fi
     model_dir="$(resolve_model_dir "$model")"
     exec "$ROOT_DIR/tools/gpu_check.sh" --model-dir "$model_dir" "${args[@]}"
-    ;;
-
-  run)
-    model=""
-    run_args=()
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --model)
-          model="${2:-}"
-          shift 2
-          ;;
-        --purpose)
-          echo "workflow run is adhoc-only; use 'workflow bench' for benchmark runs or 'workflow ml-data-gen' for ML data runs." >&2
-          exit 2
-          ;;
-        *)
-          run_args+=("$1")
-          shift
-          ;;
-      esac
-    done
-    if [[ -z "$model" ]]; then
-      echo "Missing required argument: --model <name>" >&2
-      exit 2
-    fi
-    model_dir="$(resolve_model_dir "$model")"
-    exec "$ROOT_DIR/tools/model_run.sh" --model-dir "$model_dir" "${run_args[@]}"
     ;;
 
   history-run)
@@ -418,9 +385,9 @@ case "$cmd" in
     fi
     model_dir="$(resolve_model_dir "$model")"
     if [[ -z "$run_arg" ]]; then
-      run_arg="$(latest_run_dir_for_model "$model")"
+      run_arg="$(latest_run_dir_for_model "$model" "history")"
       if [[ -z "$run_arg" ]]; then
-        echo "No runs found under $model_dir/outputs" >&2
+        echo "No history runs found under $model_dir/outputs/history" >&2
         exit 2
       fi
       echo "Using latest run: $run_arg"
@@ -503,7 +470,7 @@ case "$cmd" in
     "${compile_cmd[@]}"
 
     model_dir="$(resolve_model_dir "$model")"
-    "$ROOT_DIR/tools/model_run.sh" \
+    "$ROOT_DIR/tools/history_run.sh" \
       --model-dir "$model_dir" \
       --mode "$mode" \
       --backend "$backend" \
@@ -516,7 +483,7 @@ case "$cmd" in
     run_arg=""
     resolved_out="$(resolve_out_dir "$model_dir" "$out")"
     if [[ "$resolved_out" == "auto" ]]; then
-      run_arg="$(latest_run_dir_for_model "$model" "adhoc")"
+      run_arg="$(latest_run_dir_for_model "$model" "history")"
       if [[ -z "$run_arg" ]]; then
         echo "Run completed, but no output directory was found for plotting." >&2
         exit 2

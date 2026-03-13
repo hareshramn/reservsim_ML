@@ -67,10 +67,10 @@ def run_model(
     output_every: int = 1,
     out: str = "auto",
 ) -> dict[str, Any]:
-    """Run one case model."""
+    """Run one case model in history mode."""
     cmd = [
         str(WORKFLOW),
-        "run",
+        "history-run",
         "--model",
         model,
         "--mode",
@@ -137,7 +137,7 @@ def all_in_one(
     backend: str = "cpu",
     output_every: int = 1,
 ) -> dict[str, Any]:
-    """Compile, run, and plot from one call."""
+    """Compile, history-run, and plot from one call."""
     cmd = [
         str(WORKFLOW),
         "all",

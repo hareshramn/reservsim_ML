@@ -14,7 +14,6 @@
 
 - Auto-managed simulation runs live under `cases/<model>/outputs/<purpose>/<run_id>/`.
 - Purpose buckets:
-  - `adhoc`
   - `benchmark`
   - `ml-data`
   - `history`

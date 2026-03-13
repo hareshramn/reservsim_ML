@@ -48,18 +48,6 @@ MODE_SPECS = {
         {"key": "out", "label": "Out", "kind": "text", "default": "auto"},
         {"key": "case_file", "label": "Case YAML (optional)", "kind": "text"},
     ],
-    "run": [
-        {"key": "model", "label": "Model", "kind": "enum", "required": True},
-        {"key": "mode", "label": "Mode", "kind": "enum", "default": "release", "choices": ["debug", "release"]},
-        {"key": "backend", "label": "Backend", "kind": "enum", "default": "cpu", "choices": ["cpu", "gpu"]},
-        {"key": "steps", "label": "Steps", "kind": "text", "default": "10"},
-        {"key": "schedule_end_step", "label": "Maximum Steps", "kind": "text", "default": "100000"},
-        {"key": "output_every", "label": "Output Every", "kind": "text", "default": "1"},
-        {"key": "plot_after_run", "label": "Plot After Run", "kind": "bool"},
-        {"key": "animate_after_run", "label": "Animate After Run", "kind": "bool"},
-        {"key": "tag", "label": "Tag", "kind": "text"},
-        {"key": "out", "label": "Out", "kind": "text", "default": "auto"},
-    ],
     "ml-data-gen": [
         {"key": "model", "label": "Model", "kind": "enum", "required": True},
         {"key": "plan", "label": "Plan CSV", "kind": "text"},
@@ -127,7 +115,7 @@ MODE_SPECS = {
     ],
     "clean": [
         {"key": "model", "label": "Model", "kind": "enum", "required": True},
-        {"key": "bucket", "label": "Type of run", "kind": "enum", "default": "all", "choices": ["all", "adhoc", "benchmark", "ml-data", "legacy"]},
+        {"key": "bucket", "label": "Type of run", "kind": "enum", "default": "all", "choices": ["all", "history", "benchmark", "ml-data", "legacy"]},
         {"key": "keep", "label": "Keep Newest N", "kind": "text", "default": "5"},
         {"key": "apply", "label": "Apply", "kind": "bool"},
     ],
@@ -484,11 +472,8 @@ HTML = """<!doctype html>
     const MODE_SPECS = __MODE_SPECS__;
     const ARG_FLAG = __ARG_FLAG__;
     const COMMAND_KEY = "__command";
-    const RUN_KIND_KEY = "__run_kind";
     const ML_KIND_KEY = "__ml_kind";
-    const COMMAND_CHOICES = ["history-run", "run", "machine-learning", "validate", "clean", "parity"];
-    const RUN_KIND_TO_MODE = { "adhoc": "run", "benchmark": "bench" };
-    const RUN_KIND_CHOICES = Object.keys(RUN_KIND_TO_MODE);
+    const COMMAND_CHOICES = ["history-run", "machine-learning", "validate", "clean", "parity"];
     const ML_KIND_TO_MODE = {
       "data-generation": "ml-data-gen",
       "training": "ml-train",
@@ -499,15 +484,10 @@ HTML = """<!doctype html>
     const ML_KIND_CHOICES = Object.keys(ML_KIND_TO_MODE);
     const COMMAND_LABELS = {
       "history-run": "History Run",
-      "run": "Run",
       "machine-learning": "Machine Learning",
       "validate": "Validate",
       "clean": "Clean",
       "parity": "CPU-GPU values check",
-    };
-    const RUN_KIND_LABELS = {
-      "adhoc": "Adhoc",
-      "benchmark": "Benchmark",
     };
     const ML_KIND_LABELS = {
       "data-generation": "Data Generation",
@@ -651,13 +631,7 @@ HTML = """<!doctype html>
     function selectedMode() {
       const command = state[COMMAND_KEY];
       if (!command) return "";
-      if (command === "history-run") {
-        return "history-run";
-      }
-      if (command === "run") {
-        const runKind = state[RUN_KIND_KEY] || "adhoc";
-        return RUN_KIND_TO_MODE[runKind] || "run";
-      }
+      if (command === "history-run") return "history-run";
       if (command === "machine-learning") {
         const mlKind = state[ML_KIND_KEY] || "data-generation";
         return ML_KIND_TO_MODE[mlKind] || "ml-data-gen";
@@ -669,7 +643,6 @@ HTML = """<!doctype html>
       const grid = q("form-grid");
       grid.innerHTML = "";
       const commandSpec = { key: COMMAND_KEY, label: "Command", kind: "enum", choices: COMMAND_CHOICES };
-      const runKindSpec = { key: RUN_KIND_KEY, label: "Run Type", kind: "enum", choices: RUN_KIND_CHOICES, default: "adhoc" };
       const mlKindSpec = { key: ML_KIND_KEY, label: "ML Workflow", kind: "enum", choices: ML_KIND_CHOICES, default: "data-generation" };
 
       if (state[COMMAND_KEY] === undefined) state[COMMAND_KEY] = "";
@@ -679,10 +652,6 @@ HTML = """<!doctype html>
       const commandSpecWithChoices = { ...commandSpec, choices: COMMAND_CHOICES };
       const mode = selectedMode();
       const specs = [commandSpecWithChoices];
-      if (state[COMMAND_KEY] === "run") {
-        if (state[RUN_KIND_KEY] === undefined) state[RUN_KIND_KEY] = "adhoc";
-        specs.push(runKindSpec);
-      }
       if (state[COMMAND_KEY] === "machine-learning") {
         if (state[ML_KIND_KEY] === undefined) state[ML_KIND_KEY] = "data-generation";
         specs.push(mlKindSpec);
@@ -728,8 +697,6 @@ HTML = """<!doctype html>
             o.value = c;
             if (spec.key === COMMAND_KEY) {
               o.textContent = COMMAND_LABELS[c] || c;
-            } else if (spec.key === RUN_KIND_KEY) {
-              o.textContent = RUN_KIND_LABELS[c] || c;
             } else if (spec.key === ML_KIND_KEY) {
               o.textContent = ML_KIND_LABELS[c] || c;
             } else {
@@ -740,10 +707,10 @@ HTML = """<!doctype html>
           sel.value = spec.key === COMMAND_KEY ? (state[spec.key] || "") : (state[spec.key] || defaultFor(spec));
           sel.onchange = () => {
             state[spec.key] = sel.value;
-            if (spec.key === COMMAND_KEY || spec.key === RUN_KIND_KEY || spec.key === ML_KIND_KEY) {
+            if (spec.key === COMMAND_KEY || spec.key === ML_KIND_KEY) {
               if (spec.key === COMMAND_KEY || spec.key === ML_KIND_KEY) ensuredMlPlanModel = "";
               for (const k of Object.keys(state)) {
-                if (k !== COMMAND_KEY && k !== RUN_KIND_KEY && k !== ML_KIND_KEY) delete state[k];
+                if (k !== COMMAND_KEY && k !== ML_KIND_KEY) delete state[k];
               }
               buildForm();
             } else {
@@ -1049,7 +1016,7 @@ HTML = """<!doctype html>
         if (!log.textContent.endsWith("\\n")) log.textContent += "\\n";
         log.textContent += `[exit] code=${j.returncode ?? "?"}\\n`;
         log.scrollTop = log.scrollHeight;
-        if (payload.mode === "run" || payload.mode === "history-run") {
+        if (payload.mode === "history-run") {
           setSummary(j.summary || null);
           if (j.run_dir) lastRunDir = String(j.run_dir);
         }
@@ -1327,7 +1294,7 @@ def build_cli(mode: str, args: dict[str, object]) -> list[str]:
         if not text:
             continue
         cmd.extend([flag, text])
-    if mode in {"run", "history-run"}:
+    if mode == "history-run":
         case_file = str(args.get("case_file", "")).strip()
         if case_file:
             cmd.extend(["--case-file", case_file])
@@ -1337,14 +1304,14 @@ def build_cli(mode: str, args: dict[str, object]) -> list[str]:
 def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
     pretty = " ".join(shlex.quote(p) for p in cmd)
     print(f"[web-ui] {label} start: {pretty}", flush=True)
-    if label == "run":
+    if label == "history-run":
         with PROGRESS_LOCK:
             RUN_PROGRESS["running"] = True
             RUN_PROGRESS["step_current"] = 0
             RUN_PROGRESS["step_total"] = 0
             RUN_PROGRESS["last_line"] = "Run started"
     requested_steps: int | None = None
-    if label == "run":
+    if label == "history-run":
         for i, token in enumerate(cmd):
             if token == "--steps" and i + 1 < len(cmd):
                 try:
@@ -1352,7 +1319,7 @@ def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
                 except ValueError:
                     requested_steps = None
                 break
-    if label == "run" and requested_steps is not None:
+    if label == "history-run" and requested_steps is not None:
         with PROGRESS_LOCK:
             RUN_PROGRESS["step_total"] = requested_steps
 
@@ -1382,7 +1349,7 @@ def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
                                 last_seen = step_idx
                                 current = step_idx + 1
                                 total = requested_steps if requested_steps is not None else "?"
-                                print(f"[web-ui:run] progress step {current}/{total}", flush=True)
+                                print(f"[web-ui:history-run] progress step {current}/{total}", flush=True)
                                 with PROGRESS_LOCK:
                                     RUN_PROGRESS["step_current"] = current
                                     RUN_PROGRESS["step_total"] = requested_steps or 0
@@ -1391,7 +1358,7 @@ def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
                         pass
                 time.sleep(0.5)
 
-        watcher_thread = threading.Thread(target=_watch, name="run-step-watcher", daemon=True)
+        watcher_thread = threading.Thread(target=_watch, name="history-run-step-watcher", daemon=True)
         watcher_thread.start()
 
     proc = subprocess.Popen(
@@ -1407,7 +1374,7 @@ def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
     for line in proc.stdout:
         output.append(line)
         print(f"[web-ui:{label}] {line.rstrip()}", flush=True)
-        if label == "run":
+        if label == "history-run":
             progress_match = re.search(r"\[progress\]\s+step\s+(\d+)/(\d+)", line)
             with PROGRESS_LOCK:
                 if progress_match:
@@ -1416,7 +1383,7 @@ def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
                     RUN_PROGRESS["last_line"] = f"step {progress_match.group(1)}/{progress_match.group(2)}"
                 else:
                     RUN_PROGRESS["last_line"] = line.rstrip()
-        if label == "run":
+        if label == "history-run":
             stripped = line.strip()
             if stripped.startswith("out="):
                 run_dir = stripped.split("=", 1)[1].strip()
@@ -1427,7 +1394,7 @@ def run_command_logged(cmd: list[str], label: str) -> tuple[str, int]:
     stop_event.set()
     if watcher_thread is not None:
         watcher_thread.join(timeout=1.0)
-    if label == "run":
+    if label == "history-run":
         with PROGRESS_LOCK:
             RUN_PROGRESS["running"] = False
             RUN_PROGRESS["last_line"] = f"Run finished (exit {rc})"
@@ -1677,44 +1644,20 @@ def execute_run_request(mode: str, args_in: dict[str, object]) -> dict[str, obje
     temp_case_file: str | None = None
     args = dict(args_in)
     try:
-        if mode in {"run", "history-run"}:
+        if mode == "history-run":
             model = str(args.get("model", "")).strip()
             temp_case_file = maybe_build_case_override(model, args)
             if temp_case_file:
                 args["case_file"] = temp_case_file
         cmd = build_cli(mode, args)
-        full_stdout, final_rc = run_command_logged(cmd, "run")
+        full_stdout, final_rc = run_command_logged(cmd, "history-run")
         run_dir_for_response: str | None = None
         summary: dict[str, object] | None = None
 
-        if mode in {"run", "history-run"} and final_rc == 0:
-            plot_after_run = bool(args.get("plot_after_run"))
-            animate_after_run = bool(args.get("animate_after_run"))
+        if mode == "history-run" and final_rc == 0:
             run_dir = infer_run_dir(full_stdout, str(args.get("out", "")))
             model = str(args.get("model", "")).strip()
             run_dir_for_response = run_dir
-
-            if mode == "run" and (plot_after_run or animate_after_run) and not run_dir:
-                full_stdout += "\n[post-run] Could not determine run output directory; skipping plot/animate.\n"
-                final_rc = 2
-
-            if mode == "run" and run_dir and plot_after_run:
-                plot_cmd = [str(WORKFLOW), "plot", "--model", model, "--run", run_dir]
-                plot_out, plot_rc = run_command_logged(plot_cmd, "post-run-plot")
-                full_stdout += "\n[post-run] " + " ".join(plot_cmd) + "\n"
-                full_stdout += plot_out
-                if plot_rc != 0 and final_rc == 0:
-                    final_rc = plot_rc
-
-            if mode == "run" and run_dir and animate_after_run:
-                anim_script = ROOT / "python" / "viz" / "make_animation.py"
-                py_bin = ROOT / ".venv" / "bin" / "python"
-                anim_cmd = [str(py_bin), str(anim_script), "--run", run_dir, "--field", "sw", "--out", "animations"]
-                anim_out, anim_rc = run_command_logged(anim_cmd, "post-run-animate")
-                full_stdout += "\n[post-run] " + " ".join(anim_cmd) + "\n"
-                full_stdout += anim_out
-                if anim_rc != 0 and final_rc == 0:
-                    final_rc = anim_rc
 
             if run_dir:
                 run_path = Path(run_dir).expanduser().resolve()

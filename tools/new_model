@@ -61,4 +61,4 @@ EOF
 
 echo "Created: $MODEL_DIR"
 echo "Edit: $MODEL_FILE"
-echo "Run:  ./workflow run --model $MODEL_NAME"
+echo "Run:  ./workflow history-run --model $MODEL_NAME"

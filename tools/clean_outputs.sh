@@ -18,13 +18,13 @@ Usage:
 
 Description:
   Cleans old run folders under cases/*/outputs/.
-  Keeps the newest N runs per output bucket (for example: adhoc, benchmark, ml-data, legacy).
+  Keeps the newest N runs per output bucket (for example: history, benchmark, ml-data, legacy).
   Default mode is dry-run (no deletion). Use --apply to delete.
 
 Options:
   --model <name>   Clean one model (for example: model1)
   --all            Clean all models under cases/
-  --bucket <name>  Clean only selected buckets (adhoc, benchmark, ml-data, legacy).
+  --bucket <name>  Clean only selected buckets (history, benchmark, ml-data, legacy).
                    Accepts comma-separated values and can be repeated.
   --keep <N>       Keep newest N output folders per model (default: 5)
   --apply          Perform deletion (without this, script only prints plan)
@@ -32,7 +32,7 @@ Options:
 
 Examples:
   tools/clean_outputs.sh --model model1
-  tools/clean_outputs.sh --model model1 --bucket adhoc --keep 0 --apply
+  tools/clean_outputs.sh --model model1 --bucket history --keep 0 --apply
   tools/clean_outputs.sh --model model1 --bucket benchmark,ml-data --keep 3 --apply
   tools/clean_outputs.sh --model model1 --keep 3 --apply
   tools/clean_outputs.sh --all --keep 2 --apply
@@ -98,9 +98,9 @@ if [[ -n "$BUCKETS_CSV" ]]; then
     b="${b%"${b##*[![:space:]]}"}"
     [[ -z "$b" ]] && continue
     case "$b" in
-      adhoc|benchmark|ml-data|legacy) TARGET_BUCKETS+=("$b") ;;
+      history|benchmark|ml-data|legacy) TARGET_BUCKETS+=("$b") ;;
       *)
-        echo "Unknown --bucket value: $b (expected adhoc|benchmark|ml-data|legacy)" >&2
+        echo "Unknown --bucket value: $b (expected history|benchmark|ml-data|legacy)" >&2
         exit 2
         ;;
     esac

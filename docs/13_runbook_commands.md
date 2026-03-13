@@ -7,7 +7,6 @@ This document defines command contracts. It does not imply implementation alread
 - Auto run ID format: `YYYYMMDD_HHMMSS_mmm__<model>__<backend>__n<steps>__oe<k>[__<tag>]`.
 - Auto-managed outputs must be saved under `outputs/<purpose>/<run_id>/`.
 - Purpose buckets are:
-  - `adhoc` for manual/exploratory runs,
   - `benchmark` for performance/parity matrices,
   - `ml-data` for runs intended to feed surrogate dataset generation,
   - `history` for history-run replay and mismatch artifacts.
@@ -28,7 +27,7 @@ Expected behavior:
 - Persist schema-defined arrays and metadata.
 - Emit `timing.csv`.
 - If `--out auto`, place the run under the selected purpose bucket.
-- Purpose bucket is selected by caller contract (`workflow run`=adhoc, `workflow ml-data-gen`=ml-data, `workflow bench`=benchmark).
+- Purpose bucket is selected by caller contract (`workflow history-run`=history, `workflow ml-data-gen`=ml-data, `workflow bench`=benchmark).
 - If `--case-file` is provided, that case YAML is used for the run instead of `<model-dir>/model.yaml`.
 - On error, exit with stable code and emit one-line JSON on `stderr`:
   - `2` (`E_ARG_MISSING`), `3` (`E_ARG_INVALID`), `4` (`E_CASE_PARSE`), `5` (`E_CASE_SCHEMA`), `6` (`E_IO`).

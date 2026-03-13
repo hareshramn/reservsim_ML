@@ -5,7 +5,7 @@
 - `core-cpp/`: C++17 + CUDA simulation engine.
 - `python/`: surrogate training, evaluation, visualization, report helpers.
 - `cases/`: YAML case configurations.
-- `outputs/`: generated run artifacts, organized by purpose bucket (`adhoc`, `benchmark`, `ml-data`, `history`) when auto-managed by workflow tooling.
+- `outputs/`: generated run artifacts, organized by purpose bucket (`benchmark`, `ml-data`, `history`) when auto-managed by workflow tooling.
 - `docs/`: specs and governance.
 
 ## Data Flow
@@ -244,7 +244,7 @@ This section is planning-only and becomes executable after the pre-implementatio
 ## Assumptions (For Planning)
 
 - Main simulator entrypoint remains `sim_run` with currently locked flags.
-- History-mode replay is exposed as a separate end-user workflow rather than overloading adhoc forward runs.
+- History-mode replay is the primary end-user workflow for model execution.
 - State arrays remain dense 2D fields indexed as `[nx, ny]` in docs-facing contracts.
 - First implementation target is correctness and reproducibility on CPU, then surrogate data/training flow, then CPU/GPU parity, with GPU optimization deferred to the final performance pass.
 

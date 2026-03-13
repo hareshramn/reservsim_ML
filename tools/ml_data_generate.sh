@@ -20,8 +20,8 @@ Usage:
 
 Options:
   --plan <csv>               Scenario CSV file (default: <model-dir>/ml_scenarios.csv)
-  --mode <debug|release>     Run mode passed to workflow run (default: release)
-  --backend <cpu|gpu>        Backend passed to workflow run (default: cpu)
+  --mode <debug|release>     Simulator mode for generated runs (default: release)
+  --backend <cpu|gpu>        Backend for generated runs (default: cpu)
   --steps <N>                Steps per run (default: 200)
   --output-every <N>         Output frequency (default: 1)
   --gpu-init-retries <N>     GPU init retries (default: 0)
