@@ -43,7 +43,7 @@
 - Inputs: `03_numerical_methods.md`, `04_software_architecture.md`.
 - Outputs: `05_gpu_optimization_plan.md`.
 - Dependencies: DOC-04.
-- Done criteria: kernel order + metrics + benchmark matrix fixed.
+- Done criteria: kernel order + metrics + benchmark matrix fixed, with optimization deferred until after CPU and surrogate baselines are stable.
 
 ### DOC-06 (Agent D)
 - Objective: define surrogate model and training protocol.
@@ -88,3 +88,11 @@
 4. Parallel: DOC-13 and DOC-14.
 5. Final: README and AGENTS consistency check.
 
+## Implementation Sequencing Note
+
+- Documentation lock order remains unchanged.
+- Execution order after approval is:
+  1. CPU correctness and reproducibility.
+  2. Surrogate data generation, training, and evaluation.
+  3. CPU/GPU parity on frozen outputs.
+  4. GPU optimization and profiling as the final performance pass.

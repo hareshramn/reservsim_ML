@@ -61,6 +61,18 @@ void test_valid_wells_case() {
     expect_true(cfg.wells.producer_pi > 1.49 && cfg.wells.producer_pi < 1.51, "producer pi parse");
 }
 
+void test_valid_history_case() {
+    const SimulationConfig cfg = load_simulation_config(fixture_path("valid_history_case.yaml"));
+    expect_true(cfg.history.enabled, "history enabled");
+    expect_true(cfg.nz == 3, "history nz parse");
+    expect_true(cfg.history.start_day == 0.0, "history start day parse");
+    expect_true(cfg.history.end_day == 1.0, "history end day parse");
+    expect_true(cfg.history.match_frequency_days > 0.09 && cfg.history.match_frequency_days < 0.11, "history match frequency parse");
+    expect_true(cfg.history.controls.size() == 4, "history controls loaded");
+    expect_true(cfg.history.controls[0].well == "injector", "history control well parse");
+    expect_true(cfg.history.controls[1].control_kind == "bhp", "history control kind parse");
+}
+
 void expect_throws(const std::string& file, ExitCode code, const std::string& symbol) {
     try {
         (void)load_simulation_config(fixture_path(file));
@@ -82,6 +94,7 @@ void test_invalid_cases() {
 int main() {
     test_valid_case();
     test_valid_wells_case();
+    test_valid_history_case();
     test_invalid_cases();
     std::cout << "config_parser_tests: PASS\n";
     return 0;

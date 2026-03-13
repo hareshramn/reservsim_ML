@@ -2,23 +2,32 @@
 
 ## Objective
 
-Train a physics-informed surrogate to predict next-step pressure and saturation fields, then evaluate rollout quality and throughput.
+Train a physics-informed surrogate that supports history matching, with emphasis on accelerating mismatch evaluation or candidate screening rather than forecast-first next-step rollout.
 
 ## Modeling Target
 
+Preferred v1 target:
 \[
-(p_t, S_{w,t}, u_t) \rightarrow (p_{t+1}, S_{w,t+1})
+(\theta, u_{0:T}) \rightarrow \mathcal{J}
 \]
 
-where \(u_t\) includes control/context features (well controls, dt, static rock maps).
+where:
+- \(\theta\) denotes uncertain model parameters,
+- \(u_{0:T}\) denotes prescribed historical controls over the replay window,
+- \(\mathcal{J}\) denotes mismatch metrics against observed response.
+
+Fallback baseline target:
+\[
+(\theta, u_{0:T}) \rightarrow y_{0:T}
+\]
+
+where \(y_{0:T}\) is a compact response summary such as rates, water cut, and pressure trends.
 
 ## Baseline Model Family
 
-- CNN/UNet-style encoder-decoder.
-- Input channels:
-  - `p_t`, `sw_t`, permeability map, porosity map, optional well mask channels.
-- Output channels:
-  - `p_{t+1}`, `sw_{t+1}`.
+- MLP or lightweight sequence model for parameter-to-mismatch regression.
+- Optional compact response surrogate for parameter-to-production summary mapping.
+- Defer full field-to-field rollout surrogates until history-mode workflow is stable.
 
 ## Physics-Informed Loss
 
@@ -27,15 +36,15 @@ Total loss:
 \mathcal{L} = \lambda_d \mathcal{L}_{data} + \lambda_r \mathcal{L}_{residual} + \lambda_m \mathcal{L}_{mass}
 \]
 
-- `L_data`: supervised MSE/MAE to simulator targets.
-- `L_residual`: discrete PDE residual penalty using predicted fields.
-- `L_mass`: mismatch in global water/oil material balance.
+- `L_data`: supervised error to simulator-derived mismatch or response targets.
+- `L_residual`: optional consistency penalty if response surrogates predict state-derived quantities.
+- `L_mass`: optional conservation-informed regularization when state summaries are reconstructed.
 
 ## Dataset Generation Plan
 
-- Generate trajectory datasets from simulator runs over multiple seeds and well settings.
-- Store train/val/test splits by scenario, not random frame mixing, to reduce leakage.
-- Include both short and long horizon sequences.
+- Generate datasets from repeated history-run style simulations across uncertain parameter samples.
+- Store controls, parameter vectors, simulated response summaries, and mismatch scores.
+- Split by parameter realization groups or scenario families to reduce leakage.
 
 ## Split Strategy
 
@@ -46,17 +55,16 @@ Total loss:
 
 ## Evaluation Protocol
 
-1. One-step prediction error metrics (MAE, RMSE).
-2. Multi-step rollout drift at 20, 50, 100-step horizons.
-3. Physical plausibility checks:
-   - saturation bounds,
-   - mass-balance trend.
+1. Mismatch prediction error metrics (MAE, RMSE) on held-out parameter samples.
+2. Ranking quality:
+   - can the surrogate identify promising low-mismatch candidates?
+3. Optional response-summary fidelity:
+   - rates, water cut, average pressure.
 4. Throughput:
-   - surrogate inference time vs solver step time.
+   - candidate evaluations per second vs full simulator history run.
 
 ## Acceptance Criteria
 
-1. Stable rollout on default case horizon targets.
-2. Better conservation metric than pure data-only baseline.
-3. Measured inference speed advantage over numerical step path.
-
+1. Surrogate objective is directly useful for history matching.
+2. Held-out mismatch or response-summary accuracy is stable enough to rank candidate models.
+3. Measured evaluation speed advantage over full simulator history runs.

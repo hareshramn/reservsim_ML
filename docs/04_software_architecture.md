@@ -5,23 +5,36 @@
 - `core-cpp/`: C++17 + CUDA simulation engine.
 - `python/`: surrogate training, evaluation, visualization, report helpers.
 - `cases/`: YAML case configurations.
-- `outputs/`: generated run artifacts, organized by purpose bucket (`adhoc`, `benchmark`, `ml-data`) when auto-managed by workflow tooling.
+- `outputs/`: generated run artifacts, organized by purpose bucket (`adhoc`, `benchmark`, `ml-data`, `history`) when auto-managed by workflow tooling.
 - `docs/`: specs and governance.
 
 ## Data Flow
 
 1. Case YAML -> simulator config object.
-2. Simulator run -> checkpoint tensors + metrics under `outputs/<purpose>/<run_id>/`.
-3. `outputs/ml-data/<run_id>/` checkpoints -> ML dataset.
-4. Trained model -> rollout evaluation.
-5. Evaluation outputs -> benchmark tables and visuals.
+2. Optional history control/observation tables -> replay schedule + comparison targets.
+3. Simulator run -> checkpoint tensors + metrics under `outputs/<purpose>/<run_id>/`.
+4. `outputs/ml-data/<run_id>/` checkpoints -> ML dataset.
+5. Trained model -> evaluation.
+6. Evaluation outputs -> benchmark tables and visuals.
 
 ## Locked CLI Contracts
+
+## Primary Interaction Model
+
+- Primary user interaction path is the browser-based Web UI launched via `./webui`.
+- CLI contracts remain stable and are retained for advanced/manual runs, automation, and debugging.
+- New end-user workflows should be surfaced in the Web UI first unless they are strictly low-level developer operations.
 
 ### Simulator
 
 ```bash
 sim_run --case <path> --backend cpu|gpu --steps <N> --out <dir>
+```
+
+### History Run
+
+```bash
+sim_history_run --case <path> --backend cpu|gpu --steps <N> --out <dir>
 ```
 
 ### Simulator Error Codes (Locked v1)
@@ -62,6 +75,25 @@ Case YAML keeps existing required keys and supports 3D grids via:
 
 - Rock properties remain scalar in v1 (`rock.porosity`, `rock.permeability_md`) and are applied uniformly across all cells.
 
+## History-Mode Data Contract
+
+Optional `history` section in case YAML:
+- `controls_csv` (string path, required for history mode)
+- `observations_csv` (string path, required for history mode)
+- `start_day` (float, required for history mode)
+- `end_day` (float, required for history mode)
+- `match_frequency_days` (float, optional, default determined by observations cadence)
+
+Controls CSV contract:
+- required columns: `day`, `well`, `control_kind`, `target_value`
+- optional column: `phase`
+- rows are ordered by nondecreasing `day` per well
+
+Observations CSV contract:
+- required columns: `day`, `well`, `observable`, `value`
+- optional columns: `weight`, `source`
+- duplicate `(day, well, observable)` rows are invalid unless explicitly aggregated before ingestion
+
 ## Output Schema Contract
 
 Each run writes:
@@ -76,8 +108,20 @@ Each run writes:
 - `well_bhp.npy` shaped `[T, nwells]`
 - `timing.csv` with both per-step and aggregate runtime metrics
 
+History-run outputs add:
+- `history_match.csv`
+- `history_mismatch.json`
+- `well_observed_vs_simulated.csv`
+
 `meta.json` minimum fields:
 - `case_name`, `nx`, `ny`, `nz`, `backend`, `dt_policy`, `units`, `version`.
+
+For history runs, `meta.json` additionally records:
+- `run_kind` = `history`
+- `history_controls_csv`
+- `history_observations_csv`
+- `history_start_day`
+- `history_end_day`
 
 
 ## Interface Stability Policy
@@ -200,8 +244,9 @@ This section is planning-only and becomes executable after the pre-implementatio
 ## Assumptions (For Planning)
 
 - Main simulator entrypoint remains `sim_run` with currently locked flags.
+- History-mode replay is exposed as a separate end-user workflow rather than overloading adhoc forward runs.
 - State arrays remain dense 2D fields indexed as `[nx, ny]` in docs-facing contracts.
-- First implementation target is correctness and reproducibility on CPU, then GPU parity.
+- First implementation target is correctness and reproducibility on CPU, then surrogate data/training flow, then CPU/GPU parity, with GPU optimization deferred to the final performance pass.
 
 ## Resolved v1 Decisions
 
@@ -209,6 +254,7 @@ This section is planning-only and becomes executable after the pre-implementatio
 - `timing.csv` must include both per-step rows and an aggregate summary row.
 - CPU baseline pressure solver is fixed to `CG + Jacobi` for reproducibility.
 - Parser/config failures use stable machine-readable exit codes and single-line JSON stderr output.
+- New history-mode workflows must be exposed in the Web UI as first-class modes once implemented.
 
 ## Open Questions (Implementation Planning)
 

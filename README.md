@@ -1,26 +1,28 @@
-# High-Speed Reservoir Simulation with GPU + AI
+# Reservoir History-Mode Simulation with Web UI + AI
 
-Simulate two-phase reservoir flow, accelerate compute with GPU, and add an AI surrogate for faster forecasting with validated accuracy.
+Replay two-phase reservoir behavior under historical controls, validate the simulator response, and prepare for ML-assisted history matching through a browser-first workflow.
 
 ## Goal
 
 Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that shows:
 - numerically credible IMPES simulation,
-- measurable CPU vs GPU acceleration on RTX 3060,
-- surrogate-assisted prediction with physics-informed losses.
+- history-run style replay under prescribed controls,
+- a path toward ML-assisted history matching,
+- browser-first reproducible operation with advanced CLI fallback.
 
 ## At a Glance
 
 - Models how water and oil move in a synthetic reservoir.
-- Uses GPU acceleration to reduce runtime for repeated studies.
-- Uses an AI surrogate to speed up prediction workflows.
+- Focuses first on history-mode style replay and validation.
+- Keeps GPU optimization as a later-stage performance pass.
+- Uses an AI surrogate plan aimed at accelerating history matching rather than forecast-first rollout.
 - Produces reproducible artifacts for transparent validation.
 
 ## Why It Matters
 
 - Reservoir physics and numerical methods (Darcy flow + saturation transport).
-- GPU kernel design and profiling discipline.
-- ML surrogate design linked to physical constraints.
+- History-run and history-matching workflow design.
+- ML-assisted calibration strategy linked to physical constraints.
 - Reproducible engineering workflow suitable for technical evaluation.
 
 ## Keywords
@@ -33,6 +35,7 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 - IMPES
 - Finite Volume / TPFA
 - Physics-Informed ML
+- History Matching
 - Surrogate Modeling
 - Scientific Computing
 - Performance Optimization
@@ -87,26 +90,39 @@ Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that sh
 
 ## Final Expected Outputs
 
-- `benchmarks/benchmark_summary.csv` with CPU/GPU/surrogate performance and error metrics.
+- history-run validation artifacts and mismatch summaries.
+- `benchmarks/benchmark_summary.csv` with CPU/GPU performance and parity metrics.
 - Pressure/saturation plots and time-series charts.
 - MP4 animations of field evolution.
-- Technical report with physics, numerics, optimization, and ML findings.
+- Technical report with physics, numerics, history-mode workflow, and ML findings.
 
 ## Workflow Paths
 
-Recommended for most users (web app entrypoint from repo root):
+Primary user entrypoint (recommended for most users):
 
 ```bash
 ./webui
 ```
 
-Advanced users (full CLI):
+Equivalent shortcut:
+
+```bash
+./workflow
+```
+
+Advanced and manual workflows:
 
 ```bash
 ./workflow --help
 ```
 
-Manual path (single entry point from repo root):
+The browser UI is the default product surface. Use the CLI for manual runs, debugging, contract checks, and advanced argument control.
+
+Current implementation note:
+- The repository already supports forward simulation, validation, and ML utilities.
+- Full history-run and history-match features are the active direction and are not fully implemented yet.
+
+Manual path (advanced examples from repo root):
 
 ```bash
 ./workflow compile --mode debug --cuda off
@@ -125,8 +141,6 @@ Model convention:
 
 Examples:
 - `cases/model1/model.yaml`
-- `cases/model2/model.yaml`
-- `cases/model3/model.yaml`
 
 Notes:
 - Requires `cmake`.

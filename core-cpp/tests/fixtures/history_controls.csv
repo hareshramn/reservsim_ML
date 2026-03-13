@@ -1,0 +1,5 @@
+day,well,control_kind,target_value,phase
+0.0,injector,rate,100.0,water
+0.0,producer,bhp,2800.0,
+0.5,injector,rate,110.0,water
+0.5,producer,bhp,2750.0,

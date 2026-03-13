@@ -1,6 +1,6 @@
 # Scenario matrix for ML-data generation.
 # Header keys map to model.yaml fields; nested keys use dot notation.
 tag,injector_rate_stb_day,producer_bhp_psi,rock.permeability_md,rock.porosity
-train-a,80.0,2800.0,100.0,0.20
-train-b,100.0,2700.0,120.0,0.22
-train-c,120.0,2600.0,150.0,0.18
+history-a,90.0,2800.0,120.0,0.18
+history-b,100.0,2750.0,140.0,0.19
+history-c,110.0,2700.0,160.0,0.17

@@ -22,11 +22,12 @@
 - Early warning:
   - transfer overhead dominates timeline.
 - Mitigation:
+  - defer deep profiling until CPU outputs and surrogate data contracts are frozen,
   - keep state on device,
   - kernel fusion where valid,
   - launch parameter tuning by occupancy data.
 - Scope fallback:
-  - prioritize top 2 kernels by runtime share.
+  - ship with documented GPU parity only and treat optimization as the final stretch goal.
 
 ## Risk 3: Surrogate Rollout Drift
 
@@ -49,4 +50,5 @@
   - freeze non-essential extensions,
   - use predefined acceptance thresholds,
   - narrow to default scenario first.
-
+- Scope fallback:
+  - preserve CPU correctness, surrogate evidence, and reproducible artifacts first; move GPU optimization to the end of the schedule.

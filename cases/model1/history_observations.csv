@@ -1,0 +1,10 @@
+day,well,observable,value,weight
+0.1,injector,injector_rate,0.100,1.0
+0.1,producer,producer_bhp,2800.0,1.0
+0.1,producer,producer_rate,0.210,1.0
+0.5,injector,injector_rate,0.120,1.0
+0.5,producer,producer_bhp,2750.0,1.0
+0.5,producer,producer_rate,0.255,1.0
+0.9,injector,injector_rate,0.090,1.0
+0.9,producer,producer_bhp,2700.0,1.0
+0.9,producer,producer_rate,0.295,1.0

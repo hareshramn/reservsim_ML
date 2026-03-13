@@ -46,6 +46,7 @@ struct RunDiagnostics {
     double sw_avg = 0.0;
     double sw_min = 0.0;
     double sw_max = 0.0;
+    double simulation_day = 0.0;
     std::vector<double> well_rates_step;
     std::vector<double> well_bhp_step;
 };
@@ -237,6 +238,35 @@ OutputContext prepare_output_context(const Args& args, int schedule_end_step) {
     return ctx;
 }
 
+SimulationConfig apply_history_controls_for_day(const SimulationConfig& cfg, double simulation_day) {
+    if (!cfg.history.enabled) {
+        return cfg;
+    }
+
+    SimulationConfig step_cfg = cfg;
+    step_cfg.wells.producer_pi = cfg.wells.producer_pi;
+    for (const HistoryControlEntry& entry : cfg.history.controls) {
+        if (entry.day > simulation_day) {
+            continue;
+        }
+        if (entry.well == "injector") {
+            if (entry.control_kind == "shut") {
+                step_cfg.wells.injector_rate_stb_day = 0.0;
+            } else if (entry.control_kind == "rate") {
+                step_cfg.wells.injector_rate_stb_day = entry.target_value;
+            }
+        } else if (entry.well == "producer") {
+            if (entry.control_kind == "shut") {
+                step_cfg.wells.producer_pi = 0.0;
+            } else if (entry.control_kind == "bhp") {
+                step_cfg.wells.producer_bhp_psi = entry.target_value;
+                step_cfg.wells.producer_pi = cfg.wells.producer_pi;
+            }
+        }
+    }
+    return step_cfg;
+}
+
 void write_meta_json(const OutputContext& ctx, const Args& args, const SimulationConfig& cfg, const RunSummary& summary) {
     const fs::path meta_path = ctx.out_dir / "meta.json";
     std::ofstream meta(meta_path);
@@ -270,8 +300,16 @@ void write_meta_json(const OutputContext& ctx, const Args& args, const Simulatio
          << "  \"transport_mass_balance_rel_max\": " << summary.mass_balance_rel_max << ",\n"
          << "  \"transport_mass_balance_rel_cumulative\": " << summary.mass_balance_rel_cumulative << ",\n"
          << "  \"step_retries_total\": " << summary.step_retries_total << ",\n"
-         << "  \"step_retries_max\": " << summary.step_retries_max << "\n"
-         << "}\n";
+         << "  \"step_retries_max\": " << summary.step_retries_max;
+    if (cfg.history.enabled) {
+        meta << ",\n"
+             << "  \"run_kind\": \"history\",\n"
+             << "  \"history_controls_csv\": \"" << json_escape(cfg.history.controls_csv) << "\",\n"
+             << "  \"history_observations_csv\": \"" << json_escape(cfg.history.observations_csv) << "\",\n"
+             << "  \"history_start_day\": " << cfg.history.start_day << ",\n"
+             << "  \"history_end_day\": " << cfg.history.end_day;
+    }
+    meta << "\n}\n";
     meta.close();
     if (!meta) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "I/O failure while writing: " + meta_path.string());
@@ -402,14 +440,14 @@ void write_step_stats_csv(const OutputContext& ctx, const RunSummary& summary) {
         emit_and_exit(ExitCode::E_IO, "E_IO", "Unable to write file: " + stats_path.string());
     }
     stats << "run_id,step_idx,retries_used,pressure_iterations,pressure_relative_residual,dt_days,mass_balance_rel,"
-             "clip_count,pressure_avg,pressure_min,pressure_max,sw_avg,sw_min,sw_max,inj_rate,prod_rate,inj_bhp,prod_bhp,"
+             "clip_count,simulation_day,pressure_avg,pressure_min,pressure_max,sw_avg,sw_min,sw_max,inj_rate,prod_rate,inj_bhp,prod_bhp,"
              "pressure_time_s,transport_time_s,total_time_s\n";
     for (size_t step = 0; step < summary.step_diagnostics.size(); ++step) {
         const RunDiagnostics& d = summary.step_diagnostics[step];
         const double total_time_s = d.pressure_time_s + d.transport_time_s;
         stats << ctx.run_id << "," << step << "," << d.retries_used << "," << d.pressure_solve.iterations
               << "," << d.pressure_solve.relative_residual << "," << d.transport.dt_days << "," << d.transport.mass_balance_rel
-              << "," << d.transport.clip_count << "," << d.pressure_avg << "," << d.pressure_min << "," << d.pressure_max
+              << "," << d.transport.clip_count << "," << d.simulation_day << "," << d.pressure_avg << "," << d.pressure_min << "," << d.pressure_max
               << "," << d.sw_avg << "," << d.sw_min << "," << d.sw_max
               << "," << d.well_rates_step[0] << "," << d.well_rates_step[1]
               << "," << d.well_bhp_step[0] << "," << d.well_bhp_step[1] << "," << d.pressure_time_s
@@ -601,9 +639,13 @@ RunSummary execute_time_loop(
     RunSummary summary;
     const size_t cells_per_state = static_cast<size_t>(state.nx) * static_cast<size_t>(state.ny) * static_cast<size_t>(state.nz);
     const int progress_every = std::max(1, ctx.steps_to_run / 100); // ~1% cadence
+    double simulation_day = cfg.history.enabled ? cfg.history.start_day : 0.0;
 
     for (int step = 0; step < ctx.steps_to_run; ++step) {
-        const RunDiagnostics diagnostics = run_step_with_retry_policy(cfg, state, backend);
+        const SimulationConfig step_cfg = apply_history_controls_for_day(cfg, simulation_day);
+        RunDiagnostics diagnostics = run_step_with_retry_policy(step_cfg, state, backend);
+        simulation_day += diagnostics.transport.dt_days;
+        diagnostics.simulation_day = simulation_day;
         summary.step_diagnostics.push_back(diagnostics);
         summary.mass_balance_rel_last = diagnostics.transport.mass_balance_rel;
         summary.mass_balance_rel_max = std::max(summary.mass_balance_rel_max, diagnostics.transport.mass_balance_rel);

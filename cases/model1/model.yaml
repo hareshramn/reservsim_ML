@@ -1,27 +1,37 @@
-case_name: "minimal_16x16"
-nx: 16
-ny: 16
+case_name: "history_model1_10x10x3"
+nx: 10
+ny: 10
+nz: 3
 dt_policy: "cfl_adaptive_v1"
 units: "field"
-schedule_end_step: 20
+schedule_end_step: 12
 injector_cell_x: 0
 injector_cell_y: 0
+injector_cell_z: 0
 injector_rate_stb_day: 100.0
-producer_cell_x: 15
-producer_cell_y: 15
+producer_cell_x: 9
+producer_cell_y: 9
+producer_cell_z: 2
 producer_bhp_psi: 2800.0
+producer_pi: 1.2
 physics:
   phases: "oil_water"
   incompressible: true
   gravity: false
   capillary: false
 rock:
-  porosity: 0.2
-  permeability_md: 100.0
+  porosity: 0.18
+  permeability_md: 140.0
 fluid:
   mu_w_cp: 1.0
-  mu_o_cp: 3.0
+  mu_o_cp: 3.5
   swc: 0.2
   sor: 0.2
   nw: 2.0
   no: 2.0
+history:
+  controls_csv: "history_controls.csv"
+  observations_csv: "history_observations.csv"
+  start_day: 0.0
+  end_day: 1.2
+  match_frequency_days: 0.1

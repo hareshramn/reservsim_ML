@@ -38,6 +38,16 @@ RUN_JOBS: dict[str, dict[str, object]] = {}
 
 MODE_SPECS = {
     "doctor": [],
+    "history-run": [
+        {"key": "model", "label": "Model", "kind": "enum", "required": True},
+        {"key": "mode", "label": "Mode", "kind": "enum", "default": "release", "choices": ["debug", "release"]},
+        {"key": "backend", "label": "Backend", "kind": "enum", "default": "cpu", "choices": ["cpu", "gpu"]},
+        {"key": "steps", "label": "Steps", "kind": "text", "default": "10"},
+        {"key": "output_every", "label": "Output Every", "kind": "text", "default": "1"},
+        {"key": "tag", "label": "Tag", "kind": "text"},
+        {"key": "out", "label": "Out", "kind": "text", "default": "auto"},
+        {"key": "case_file", "label": "Case YAML (optional)", "kind": "text"},
+    ],
     "run": [
         {"key": "model", "label": "Model", "kind": "enum", "required": True},
         {"key": "mode", "label": "Mode", "kind": "enum", "default": "release", "choices": ["debug", "release"]},
@@ -428,8 +438,8 @@ HTML = """<!doctype html>
 <body>
   <div class="wrap">
     <div class="panel">
-      <h1>Reserv ML Workflow UI</h1>
-      <div class="muted">Choose mode, fill only relevant arguments, run from browser.</div>
+      <h1>Reserv ML Web UI</h1>
+      <div class="muted">Primary user entrypoint for browser-based runs. Use the CLI only for advanced manual workflows and debugging.</div>
       <div class="status" id="doctor-status">Checking environment...</div>
       <div class="grid" id="form-grid"></div>
       <div class="actions">
@@ -476,7 +486,7 @@ HTML = """<!doctype html>
     const COMMAND_KEY = "__command";
     const RUN_KIND_KEY = "__run_kind";
     const ML_KIND_KEY = "__ml_kind";
-    const COMMAND_CHOICES = ["run", "machine-learning", "validate", "clean", "parity"];
+    const COMMAND_CHOICES = ["history-run", "run", "machine-learning", "validate", "clean", "parity"];
     const RUN_KIND_TO_MODE = { "adhoc": "run", "benchmark": "bench" };
     const RUN_KIND_CHOICES = Object.keys(RUN_KIND_TO_MODE);
     const ML_KIND_TO_MODE = {
@@ -488,6 +498,7 @@ HTML = """<!doctype html>
     };
     const ML_KIND_CHOICES = Object.keys(ML_KIND_TO_MODE);
     const COMMAND_LABELS = {
+      "history-run": "History Run",
       "run": "Run",
       "machine-learning": "Machine Learning",
       "validate": "Validate",
@@ -640,6 +651,9 @@ HTML = """<!doctype html>
     function selectedMode() {
       const command = state[COMMAND_KEY];
       if (!command) return "";
+      if (command === "history-run") {
+        return "history-run";
+      }
       if (command === "run") {
         const runKind = state[RUN_KIND_KEY] || "adhoc";
         return RUN_KIND_TO_MODE[runKind] || "run";
@@ -750,7 +764,7 @@ HTML = """<!doctype html>
           inp.type = "text";
           inp.value = state[spec.key] || "";
           inp.oninput = () => { state[spec.key] = inp.value; updatePreview(); };
-          const PICKER_KEYS = new Set(["out", "run", "case", "data", "plan", "cpu_run", "gpu_run"]);
+          const PICKER_KEYS = new Set(["out", "run", "case", "case_file", "data", "plan", "cpu_run", "gpu_run"]);
           const needsFolderPicker = PICKER_KEYS.has(spec.key);
           if (needsFolderPicker) {
             const row = document.createElement("div");
@@ -972,6 +986,9 @@ HTML = """<!doctype html>
         '<div class="kv-grid">',
         ...cards.map(([k, v]) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`),
         "</div>",
+        summary.history
+          ? `<div class="kv-grid"><div class="kv"><div class="k">History Objective</div><div class="v">${fmtNum(summary.history.objective_value, 6)}</div></div><div class="kv"><div class="k">Compare Count</div><div class="v">${summary.history.compare_count || 0}</div></div></div>`
+          : "",
         `<div class="mono">Run directory: ${summary.run_dir || ""}</div>`,
       ].join("");
       content.innerHTML = html;
@@ -1032,7 +1049,7 @@ HTML = """<!doctype html>
         if (!log.textContent.endsWith("\\n")) log.textContent += "\\n";
         log.textContent += `[exit] code=${j.returncode ?? "?"}\\n`;
         log.scrollTop = log.scrollHeight;
-        if (payload.mode === "run") {
+        if (payload.mode === "run" || payload.mode === "history-run") {
           setSummary(j.summary || null);
           if (j.run_dir) lastRunDir = String(j.run_dir);
         }
@@ -1310,7 +1327,7 @@ def build_cli(mode: str, args: dict[str, object]) -> list[str]:
         if not text:
             continue
         cmd.extend([flag, text])
-    if mode == "run":
+    if mode in {"run", "history-run"}:
         case_file = str(args.get("case_file", "")).strip()
         if case_file:
             cmd.extend(["--case-file", case_file])
@@ -1526,6 +1543,11 @@ def build_run_summary(run_dir: Path) -> dict[str, object]:
             "avg_step_time_s": (total_time / count) if count else 0.0,
         },
         "step_last": step_last,
+        "history": (
+            json.loads((run_dir / "history_mismatch.json").read_text(encoding="utf-8"))
+            if (run_dir / "history_mismatch.json").exists()
+            else None
+        ),
     }
 
 
@@ -1564,7 +1586,7 @@ def build_visuals_page(run_dir: Path) -> str:
     else:
         dim_msg = (
             "Detected legacy 2D run metadata (missing nz or nz<=1). "
-            "This run will only show 2D maps. Rebuild and re-run model2 to generate 3D outputs."
+            "This run will only show 2D maps. Rebuild and re-run the case with nz>1 to generate 3D outputs."
         )
         dim_style = "background:#fff7ed;border:1px solid #fed7aa;color:#9a3412"
 
@@ -1655,7 +1677,7 @@ def execute_run_request(mode: str, args_in: dict[str, object]) -> dict[str, obje
     temp_case_file: str | None = None
     args = dict(args_in)
     try:
-        if mode == "run":
+        if mode in {"run", "history-run"}:
             model = str(args.get("model", "")).strip()
             temp_case_file = maybe_build_case_override(model, args)
             if temp_case_file:
@@ -1665,18 +1687,18 @@ def execute_run_request(mode: str, args_in: dict[str, object]) -> dict[str, obje
         run_dir_for_response: str | None = None
         summary: dict[str, object] | None = None
 
-        if mode == "run" and final_rc == 0:
+        if mode in {"run", "history-run"} and final_rc == 0:
             plot_after_run = bool(args.get("plot_after_run"))
             animate_after_run = bool(args.get("animate_after_run"))
             run_dir = infer_run_dir(full_stdout, str(args.get("out", "")))
             model = str(args.get("model", "")).strip()
             run_dir_for_response = run_dir
 
-            if (plot_after_run or animate_after_run) and not run_dir:
+            if mode == "run" and (plot_after_run or animate_after_run) and not run_dir:
                 full_stdout += "\n[post-run] Could not determine run output directory; skipping plot/animate.\n"
                 final_rc = 2
 
-            if run_dir and plot_after_run:
+            if mode == "run" and run_dir and plot_after_run:
                 plot_cmd = [str(WORKFLOW), "plot", "--model", model, "--run", run_dir]
                 plot_out, plot_rc = run_command_logged(plot_cmd, "post-run-plot")
                 full_stdout += "\n[post-run] " + " ".join(plot_cmd) + "\n"
@@ -1684,7 +1706,7 @@ def execute_run_request(mode: str, args_in: dict[str, object]) -> dict[str, obje
                 if plot_rc != 0 and final_rc == 0:
                     final_rc = plot_rc
 
-            if run_dir and animate_after_run:
+            if mode == "run" and run_dir and animate_after_run:
                 anim_script = ROOT / "python" / "viz" / "make_animation.py"
                 py_bin = ROOT / ".venv" / "bin" / "python"
                 anim_cmd = [str(py_bin), str(anim_script), "--run", run_dir, "--field", "sw", "--out", "animations"]

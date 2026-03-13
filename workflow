@@ -8,6 +8,11 @@ usage() {
 Usage:
   ./workflow <command> [options]
 
+Primary user path:
+  ./webui
+
+CLI is intended for advanced/manual runs, automation, and debugging.
+
 Commands:
   compile|build [compile options]
       Delegate to tools/compile_tool.sh.
@@ -19,14 +24,20 @@ Commands:
       Launch a local GUI for selecting workflow mode and command arguments.
 
   web-ui [--host 0.0.0.0] [--port 8770]
-      Launch a browser-based local UI for selecting mode and arguments.
+      Launch the primary browser-based local UI for selecting mode and arguments.
 
   gpu-check --model <modelN> [gpu-check options]
       Probe CUDA readiness with a tiny GPU run.
 
   run --model <modelN> [run options]
       Run one model from repo root.
+      Advanced/manual CLI path; most users should use ./webui.
       Run options: --mode --backend --steps --output-every --out --gpu-init-retries --tag --case-file
+
+  history-run --model <modelN> [history-run options]
+      Replay one model in history mode and generate mismatch artifacts.
+      Preferred end-user path is via ./webui.
+      History-run options: --mode --backend --steps --output-every --out --gpu-init-retries --tag --case-file
 
   ml-data-gen --model <modelN> [ml-data-gen options]
       Generate ML-data runs from temporary case YAML variants.
@@ -71,12 +82,14 @@ Commands:
         --check-only                  (plot validation only)
 
 Examples:
+  ./webui
   ./workflow compile --mode debug --cuda off
   ./workflow doctor
   ./workflow ui
   ./workflow web-ui
   ./workflow gpu-check --model model1 --mode release
   ./workflow run --model model1 --steps 10 --mode release
+  ./workflow history-run --model model1 --steps 10 --mode release
   ./workflow ml-data-gen --model model1 --plan cases/model1/ml_scenarios.csv --steps 200
   ./workflow ml-check --model model1
   ./workflow validate --run cases/model1/outputs/ml-data/<run_id>
@@ -131,7 +144,7 @@ resolve_out_dir() {
   esac
 }
 
-cmd="${1:-help}"
+cmd="${1:-web-ui}"
 if [[ $# -gt 0 ]]; then
   shift
 fi
@@ -214,6 +227,29 @@ case "$cmd" in
     fi
     model_dir="$(resolve_model_dir "$model")"
     exec "$ROOT_DIR/tools/model_run.sh" --model-dir "$model_dir" "${run_args[@]}"
+    ;;
+
+  history-run)
+    model=""
+    run_args=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --model)
+          model="${2:-}"
+          shift 2
+          ;;
+        *)
+          run_args+=("$1")
+          shift
+          ;;
+      esac
+    done
+    if [[ -z "$model" ]]; then
+      echo "Missing required argument: --model <name>" >&2
+      exit 2
+    fi
+    model_dir="$(resolve_model_dir "$model")"
+    exec "$ROOT_DIR/tools/history_run.sh" --model-dir "$model_dir" "${run_args[@]}"
     ;;
 
   ml-data-gen)

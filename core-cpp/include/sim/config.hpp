@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 struct PhysicsConfig {
     std::string phases;
@@ -36,6 +37,24 @@ struct WellsConfig {
     double producer_pi = 1.0;
 };
 
+struct HistoryControlEntry {
+    double day = 0.0;
+    std::string well;
+    std::string control_kind;
+    double target_value = 0.0;
+    std::string phase;
+};
+
+struct HistoryConfig {
+    bool enabled = false;
+    std::string controls_csv;
+    std::string observations_csv;
+    double start_day = 0.0;
+    double end_day = 0.0;
+    double match_frequency_days = 0.0;
+    std::vector<HistoryControlEntry> controls;
+};
+
 struct SimulationConfig {
     std::string case_name;
     int nx = 0;
@@ -48,6 +67,7 @@ struct SimulationConfig {
     RockConfig rock;
     FluidConfig fluid;
     WellsConfig wells;
+    HistoryConfig history;
 };
 
 SimulationConfig load_simulation_config(const std::string& case_path);

@@ -33,13 +33,18 @@
 
 - Problem setup diagram.
 - Physics/numerics summary figure.
-- CPU/GPU speedup summary.
-- Parity/error summary.
 - Surrogate rollout and throughput summary.
+- CPU/GPU parity/error summary.
+- CPU/GPU speedup summary (final optimization section).
+
+## Reporting Sequence
+
+- Interim reviews may omit final GPU speedup visuals if optimization is still deferred.
+- Before final submission, add the GPU optimization section after numerical and surrogate results so performance claims are presented against a stable baseline.
 
 ## Acceptance Criteria
 
 1. All required figures generated for default case.
 2. At least one animation for solver and one for surrogate comparison.
 3. Figure naming is consistent with artifact specification.
-
+4. If GPU optimization is still in progress, interim reports must label CPU/GPU speedup visuals as pending rather than implying final performance closure.

@@ -139,8 +139,8 @@ if ! [[ "$GPU_INIT_RETRIES" =~ ^[0-9]+$ ]]; then
   echo "Invalid --gpu-init-retries: $GPU_INIT_RETRIES (non-negative integer required)" >&2
   exit 2
 fi
-if [[ "$OUTPUT_BUCKET" != "adhoc" && "$OUTPUT_BUCKET" != "benchmark" && "$OUTPUT_BUCKET" != "ml-data" ]]; then
-  echo "Invalid output bucket: $OUTPUT_BUCKET (adhoc|benchmark|ml-data)" >&2
+if [[ "$OUTPUT_BUCKET" != "adhoc" && "$OUTPUT_BUCKET" != "benchmark" && "$OUTPUT_BUCKET" != "ml-data" && "$OUTPUT_BUCKET" != "history" ]]; then
+  echo "Invalid output bucket: $OUTPUT_BUCKET (adhoc|benchmark|ml-data|history)" >&2
   exit 2
 fi
 

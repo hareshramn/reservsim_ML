@@ -4,6 +4,12 @@
 
 Show defensible speedup of GPU backend versus CPU baseline while preserving numerical parity.
 
+## Execution Sequencing
+
+- This plan is intentionally scheduled after CPU correctness, artifact reproducibility, and surrogate baseline evidence are stable.
+- GPU implementation may exist earlier for parity and interface validation, but optimization/profiling work is deferred to the final execution phase.
+- Optimization decisions must not force interface or artifact schema changes already locked in `docs/04_software_architecture.md` and `docs/14_artifact_spec.md`.
+
 ## Kernel Candidates (Priority Order)
 
 1. Property update kernel:
@@ -50,4 +56,4 @@ Required metrics:
 1. GPU speedup > 1x on default and stress cases.
 2. Profiling evidence stored with run artifacts.
 3. CPU/GPU parity metrics remain within tolerances.
-
+4. Optimization work does not regress CPU baseline reproducibility or surrogate data-generation contracts.

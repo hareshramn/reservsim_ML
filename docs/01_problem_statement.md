@@ -4,6 +4,19 @@
 
 Use a SPE1-inspired synthetic quarter-five-spot waterflood mini-case for a 2D Cartesian reservoir.
 
+## Current Focus
+
+- Primary workflow target: history-run style replay under prescribed well controls.
+- Future workflow target: prediction-mode scenario runs after the history-mode path is stable.
+- In v1 planning, the synthetic case stands in for historical controls and observations until explicit observation tables are added.
+
+## History-Mode Inputs
+
+- Historical controls are treated as known over the replay window.
+- Observed response data is treated as the comparison target.
+- A history run replays controls once and reports mismatch.
+- A future history-match loop may repeat history runs with different uncertain parameters.
+
 ## Domain and Resolution
 
 - Default grid: `64 x 64`.
@@ -15,7 +28,8 @@ Use a SPE1-inspired synthetic quarter-five-spot waterflood mini-case for a 2D Ca
 
 - Injector: rate-controlled water injection.
 - Producer: BHP-controlled production.
-- Controls fixed per scenario for reproducible comparisons.
+- Controls are treated as known inputs for replay-style runs.
+- Comparison target is the reservoir response, not the controls themselves.
 
 ## Rock and Fluid Assumptions
 
@@ -75,9 +89,42 @@ numerics:
   backend: cpu
 ```
 
+## History-Mode Schema Additions (Planned)
+
+The base case schema is extended with explicit history data references:
+
+```yaml
+history:
+  controls_csv: cases/model1/history_controls.csv
+  observations_csv: cases/model1/history_observations.csv
+  start_day: 0.0
+  end_day: 200.0
+  match_frequency_days: 1.0
+```
+
+`history.controls_csv` minimum columns:
+- `day`
+- `well`
+- `control_kind` (`rate`, `bhp`, `shut`)
+- `target_value`
+- `phase` (`water`, `oil`, `liquid`, optional for `bhp`)
+
+`history.observations_csv` minimum columns:
+- `day`
+- `well`
+- `observable` (`oil_rate`, `water_rate`, `liquid_rate`, `water_cut`, `bhp`)
+- `value`
+- `weight` (optional, default `1.0`)
+
+Planning assumptions:
+- Controls are piecewise constant between declared `day` values.
+- Observations may be sparser than simulator timesteps and must be aligned by interpolation or nearest declared policy in implementation.
+- If `history` is omitted, the case remains a forward/manual run case.
+
 ## Acceptance for Problem Spec
 
 1. Input schema covers grid, rock, fluid, wells, schedule, numerics.
 2. Three predefined scenarios exist: sanity/default/stress.
 3. All assumptions and exclusions are explicit.
-
+4. The distinction between known controls and matched response is explicit for history-mode planning.
+5. History-mode data contracts for controls and observations are explicitly defined.

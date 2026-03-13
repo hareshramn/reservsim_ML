@@ -4,10 +4,11 @@
 
 1. Benchmark summary CSV.
 2. Numerical validation CSV.
-3. Surrogate evaluation CSV.
-4. Required PNG figures.
-5. MP4 animations.
-6. Technical report (`report.pdf`).
+3. History-match / mismatch CSV and JSON artifacts.
+4. Surrogate evaluation CSV.
+5. Required PNG figures.
+6. MP4 animations.
+7. Technical report (`report.pdf`).
 
 ## Output Layout
 
@@ -16,6 +17,7 @@
   - `adhoc`
   - `benchmark`
   - `ml-data`
+  - `history`
 
 State array shape contract:
 - `state_pressure.npy` and `state_sw.npy` use:
@@ -69,6 +71,40 @@ Columns:
 - `mass_penalty`
 - `infer_steps_per_s`
 
+### `history_match.csv`
+
+Columns:
+- `run_id`
+- `day`
+- `well`
+- `observable`
+- `observed_value`
+- `simulated_value`
+- `abs_error`
+- `squared_error`
+- `weight`
+- `weighted_error`
+
+### `well_observed_vs_simulated.csv`
+
+Columns:
+- `run_id`
+- `well`
+- `observable`
+- `rmse`
+- `mae`
+- `weighted_misfit`
+
+### `history_mismatch.json`
+
+Required top-level fields:
+- `run_id`
+- `objective_name`
+- `objective_value`
+- `compare_count`
+- `per_well`
+- `per_observable`
+
 ## Figure Naming Rules
 
 - Prefix all figures with `fig_`.
@@ -91,17 +127,19 @@ Columns:
 1. Executive summary.
 2. Problem and assumptions.
 3. Physics and numerics.
-4. Software and GPU optimization.
-5. Surrogate method.
-6. Validation and benchmark results.
-7. Limits and future work.
-8. Reproducibility appendix (commands + seeds).
+4. Software and CPU baseline implementation.
+5. Surrogate method and evaluation.
+6. CPU/GPU parity and GPU optimization.
+7. Validation and benchmark results.
+8. Limits and future work.
+9. Reproducibility appendix (commands + seeds).
 
 ## Submission Bundle Checklist
 
 - `README.md`
 - `docs/` complete
 - `benchmarks/benchmark_summary.csv`
+- `history_match.csv` or equivalent exported mismatch artifact for the main history run
 - `surrogate_eval.csv`
 - required PNG figures
 - at least two MP4 files

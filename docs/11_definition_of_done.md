@@ -13,6 +13,10 @@
    - TPFA total flux formula and upwinded water flux coupling,
    - explicit CFL formula and `clamp(safety * dt_cfl, dt_min, dt_max)` policy,
    - numeric tolerances for pressure residual, mass-balance, and retry budget.
+7. Execution sequencing is respected:
+   - CPU correctness and artifact reproducibility first,
+   - surrogate data/training/evaluation second,
+   - GPU parity and optimization evidence last.
 
 ## Quality Bar by Artifact
 
@@ -22,7 +26,7 @@
 - Numerics:
   - IMPES algorithm and stability rules explicitly stated with numeric constants and equations.
 - GPU plan:
-  - kernel priorities and profiler metrics fixed.
+  - kernel priorities and profiler metrics fixed, with optimization explicitly treated as a final-stage activity.
 - ML plan:
   - model input/output and loss terms fixed.
 - Validation:
