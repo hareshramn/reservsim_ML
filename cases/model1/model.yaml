@@ -4,7 +4,7 @@ ny: 10
 nz: 3
 dt_policy: "cfl_adaptive_v1"
 units: "field"
-schedule_end_step: 12
+schedule_end_step: 200
 injector_cell_x: 0
 injector_cell_y: 0
 injector_cell_z: 0
@@ -33,5 +33,5 @@ history:
   controls_csv: "history_controls.csv"
   observations_csv: "history_observations.csv"
   start_day: 0.0
-  end_day: 1.2
-  match_frequency_days: 0.1
+  end_day: 20.0
+  match_frequency_days: 1.0
