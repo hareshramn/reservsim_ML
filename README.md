@@ -1,104 +1,45 @@
-# Reservoir History-Mode Simulation with Web UI + AI
+# Reservoir History Matching Mini-Stack
 
-Replay two-phase reservoir behavior under historical controls, validate the simulator response, and prepare for ML-assisted history matching through a browser-first workflow.
+A browser-first reservoir simulation project focused on `history-run` replay, mismatch analysis, and ML-assisted candidate screening for history matching.
 
-## Goal
+## What This Project Is
 
-Build a SPE1-inspired synthetic two-phase (oil-water) reservoir workflow that shows:
-- numerically credible IMPES simulation,
-- history-run style replay under prescribed controls,
-- a path toward ML-assisted history matching,
-- browser-first reproducible operation with advanced CLI fallback.
+This repo implements a compact synthetic oil-water reservoir workflow with:
+- an IMPES-based simulator,
+- prescribed historical control replay,
+- observed-vs-simulated mismatch artifacts,
+- a Web UI as the primary user surface,
+- an ML ranking workflow that scores candidate parameter sets before expensive simulator runs.
 
-## At a Glance
+The current project is intentionally centered on `history mode`, not forecast mode.
 
-- Models how water and oil move in a synthetic reservoir.
-- Focuses first on history-mode style replay and validation.
-- Keeps GPU optimization as a later-stage performance pass.
-- Uses an ML ranker plan aimed at accelerating history matching by screening candidate parameter sets.
-- Produces reproducible artifacts for transparent validation.
+## Why It Is Interesting
 
-## Why It Matters
+- It connects reservoir physics, numerical methods, and reproducible workflow design in one codebase.
+- It frames ML around a realistic inverse problem: screening parameter candidates for history matching.
+- It is structured as a small but coherent scientific-computing system rather than an isolated simulator demo.
 
-- Reservoir physics and numerical methods (Darcy flow + saturation transport).
-- History-run and history-matching workflow design.
-- ML-assisted calibration strategy linked to physical constraints.
-- Reproducible engineering workflow suitable for technical evaluation.
+## Current Scope
 
-## Keywords
+Implemented now:
+- browser-first `history-run` workflow,
+- `10x10x3` synthetic `model1` with one injector and one producer,
+- history controls and observations,
+- mismatch artifacts:
+  - `history_match.csv`
+  - `history_mismatch.json`
+  - `well_observed_vs_simulated.csv`
+- ML candidate data generation,
+- ML train/evaluate/score flow for history-match ranking.
 
-- Reservoir Simulation
-- CUDA
-- GPU Acceleration
-- High-Performance Computing (HPC)
-- Numerical Methods
-- IMPES
-- Finite Volume / TPFA
-- Physics-Informed ML
-- History Matching
-- ML Candidate Ranking
-- Scientific Computing
-- Performance Optimization
-- Profiling (Nsight)
-- Parallel Computing
-- C++ and Python
-- Reproducible Benchmarks
+Not implemented yet:
+- iterative parameter-optimization loop for full automatic `history-match`,
+- prediction-mode scenario forecasting,
+- final GPU optimization pass.
 
-## Repo Map
+## Main Workflow
 
-```text
-.
-├── AGENTS.md
-├── README.md
-├── Project_deets
-├── docs/
-│   ├── 00_project_charter.md
-│   ├── 01_problem_statement.md
-│   ├── 02_physics_math.md
-│   ├── 03_numerical_methods.md
-│   ├── 04_software_architecture.md
-│   ├── 05_gpu_optimization_plan.md
-│   ├── 06_surrogate_ml_plan.md
-│   ├── 07_validation_and_benchmarking.md
-│   ├── 08_visualization_and_reporting.md
-│   ├── 09_execution_timeline_2weeks.md
-│   ├── 10_risks_and_mitigations.md
-│   ├── 11_definition_of_done.md
-│   ├── 12_agent_task_board.md
-│   ├── 13_runbook_commands.md
-│   └── 14_artifact_spec.md
-├── core-cpp/      (C++ simulation core, builds, tests)
-├── python/        (ML and visualization scripts)
-├── cases/         (model configs and scenario inputs)
-├── tools/         (workflow scripts, MCP server, web UI)
-├── benchmarks/    (benchmark artifacts and summaries)
-└── outputs/       (generated run artifacts)
-```
-
-## Start Here
-
-1. [Project Charter](docs/00_project_charter.md)
-2. [Problem Statement](docs/01_problem_statement.md)
-3. [Physics and Math](docs/02_physics_math.md)
-4. [Numerical Methods](docs/03_numerical_methods.md)
-5. [Software Architecture](docs/04_software_architecture.md)
-6. [GPU Optimization Plan](docs/05_gpu_optimization_plan.md)
-7. [History-Match ML Plan](docs/06_surrogate_ml_plan.md)
-8. [Validation and Benchmarking](docs/07_validation_and_benchmarking.md)
-9. [Visualization and Reporting](docs/08_visualization_and_reporting.md)
-10. [2-Week Timeline](docs/09_execution_timeline_2weeks.md)
-
-## Final Expected Outputs
-
-- history-run validation artifacts and mismatch summaries.
-- `benchmarks/benchmark_summary.csv` with CPU/GPU performance and parity metrics.
-- Pressure/saturation plots and time-series charts.
-- MP4 animations of field evolution.
-- Technical report with physics, numerics, history-mode workflow, and ML findings.
-
-## Workflow Paths
-
-Primary user entrypoint (recommended for most users):
+### 1. Launch the Web UI
 
 ```bash
 ./webui
@@ -110,84 +51,163 @@ Equivalent shortcut:
 ./workflow
 ```
 
-Advanced and manual workflows:
+This is the primary way to use the project.
 
-```bash
-./workflow --help
-```
-
-The browser UI is the default product surface. Use the CLI for manual history-run execution, debugging, contract checks, and advanced argument control.
-
-Current implementation note:
-- `history-run` is the active model-execution path in the current codebase.
-- Full iterative `history-match` optimization is not implemented yet.
-- ML now focuses on candidate screening for history matching, not field-to-field transition surrogates.
-
-Manual path (advanced examples from repo root):
+### 2. Compile the simulator
 
 ```bash
 ./workflow compile --mode debug --cuda off
-./workflow history-run --model model1 --steps 10 --mode release
-./workflow ml-data-gen --model model1 --steps 200
-./workflow ml-train --model model1
-./workflow ml-eval --model model1 --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
-./workflow ml-score --model model1 --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
-./workflow plot --model model1
-./workflow clean --model model1 --keep 3 --apply
-./workflow all --model model1 --steps 10
 ```
 
-Model convention:
-- each model lives in its own folder,
-- required file name: `model.yaml`,
-- defaults live in `run.env`,
-- execute from repo root with `./workflow history-run --model <model>`,
-- outputs are written to `<model_dir>/outputs/<purpose>/<run_id>/`.
+For an optimized CPU build:
 
-Examples:
-- `cases/model1/model.yaml`
+```bash
+./workflow compile --mode release --cuda off
+```
 
-Notes:
-- Requires `cmake`.
+### 3. Run history mode
+
+```bash
+./workflow history-run --model model1 --mode release --backend cpu --steps 200 --output-every 20
+```
+
+This writes outputs under:
+
+```text
+cases/model1/outputs/history/<run_id>/
+```
+
+### 4. Generate ML candidate data
+
+```bash
+./workflow ml-data-gen --model model1 --steps 200 --output-every 20
+```
+
+This runs a matrix of history-mode candidate cases from [ml_scenarios.csv](cases/model1/ml_scenarios.csv) and writes:
+
+```text
+cases/model1/outputs/ml-data/<run_id>/
+cases/model1/outputs/ml-data/history_ml_dataset.csv
+```
+
+### 5. Train the history-match ML ranker
+
+```bash
+./workflow ml-train --model model1
+```
+
+Checkpoint output:
+
+```text
+cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
+```
+
+### 6. Evaluate the ranker
+
+```bash
+./workflow ml-eval --model model1 \
+  --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
+```
+
+Evaluation output:
+
+```text
+cases/model1/outputs/ml-eval/latest/history_ml_eval.csv
+```
+
+### 7. Score candidate parameter sets
+
+```bash
+./workflow ml-score --model model1 \
+  --checkpoint cases/model1/outputs/ml-train/latest/history_match_checkpoint.npz
+```
+
+Ranking output:
+
+```text
+cases/model1/outputs/ml-score/latest/candidate_scores.csv
+```
+
+## Project Structure
+
+```text
+.
+├── core-cpp/      C++/CUDA simulator and tests
+├── python/        ML and visualization scripts
+├── tools/         workflow scripts, Web UI, MCP server
+├── cases/model1/  active history-mode case
+├── docs/          project specs and runbook
+└── benchmarks/    benchmark summaries
+```
+
+Key files:
+- [workflow](/mnt/c/Users/hares/Documents/Natarajan/reserv_ML/workflow)
+- [cases/model1/model.yaml](/mnt/c/Users/hares/Documents/Natarajan/reserv_ML/cases/model1/model.yaml)
+- [cases/model1/history_controls.csv](/mnt/c/Users/hares/Documents/Natarajan/reserv_ML/cases/model1/history_controls.csv)
+- [cases/model1/history_observations.csv](/mnt/c/Users/hares/Documents/Natarajan/reserv_ML/cases/model1/history_observations.csv)
+- [cases/model1/ml_scenarios.csv](/mnt/c/Users/hares/Documents/Natarajan/reserv_ML/cases/model1/ml_scenarios.csv)
+- [cases/model1/history_ml_config.yaml](/mnt/c/Users/hares/Documents/Natarajan/reserv_ML/cases/model1/history_ml_config.yaml)
+
+## Visualization
+
+Generate figures for a history run:
+
+```bash
+tools/plot_run.sh --run cases/model1/outputs/history/<run_id> --out figs
+```
+
+Validate artifact structure only:
+
+```bash
+tools/plot_run.sh --run cases/model1/outputs/history/<run_id> --check-only
+```
+
+## Environment Notes
+
+- `cmake` is required.
 - `--cuda on` requires `nvcc`.
-- Output binaries are placed under `core-cpp/build/<mode>-<cpu|cuda>/`.
+- Python ML and plotting scripts work best from the project venv.
 
-## Plotting Workflow
-
-Create project venv and install plotting dependencies:
+Minimal setup:
 
 ```bash
 python3 -m venv .venv
 ./.venv/bin/pip install numpy matplotlib
 ```
 
-Generate figures from a run:
+## Technical Positioning
+
+This project is best described as:
+- a history-mode reservoir simulation workflow,
+- with mismatch reporting,
+- plus ML-assisted candidate ranking for future history matching.
+
+It is not yet a full automatic history-matching system, and it is not currently focused on forecast-mode surrogate simulation.
+
+## Docs
+
+Start here:
+
+1. [Project Charter](docs/00_project_charter.md)
+2. [Problem Statement](docs/01_problem_statement.md)
+3. [Numerical Methods](docs/03_numerical_methods.md)
+4. [Software Architecture](docs/04_software_architecture.md)
+5. [History-Match ML Plan](docs/06_surrogate_ml_plan.md)
+6. [Runbook Commands](docs/13_runbook_commands.md)
+7. [Artifact Specification](docs/14_artifact_spec.md)
+
+## MCP Server
+
+The repo also exposes workflow actions through an MCP server:
 
 ```bash
-tools/plot_run.sh --run cases/model1/outputs/<run_id> --out figs
-```
-
-Validate run artifacts only (no figure generation):
-
-```bash
-tools/plot_run.sh --run cases/model1/outputs/<run_id> --check-only
-```
-
-## MCP Server (LLM Tooling)
-
-This repo now includes a real MCP server that exposes compile/history-run/plot/clean tools:
-
-```bash
-.venv/bin/pip install mcp
+./.venv/bin/pip install mcp
 python3 tools/mcp_server.py
 ```
 
-Exposed MCP tools:
+Available MCP tools:
 - `compile_code`
 - `run_model`
 - `plot_run`
 - `clean_outputs`
 - `all_in_one`
-
-Example MCP-style intent:
-- "Compile and history-run model1 for 10 steps, then plot" -> call `all_in_one(model=\"model1\", steps=10)`
